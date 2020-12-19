@@ -1,9 +1,6 @@
-#######################################################################################################
-# Code to generate the reactivity dataset for the Transformer AutoEncoder
-#######################################################################################################
 
 
-import re
+# Autoencoder experiment
 
 def synthetic_kcat_score(seq):
     """Assign a score simulating catalytic activity based on an input sequence"""
@@ -18,7 +15,7 @@ def synthetic_kcat_score(seq):
     # "Score" is the sum of the matching sequences plus some randomness
     score = cnt_1 + cnt_2 + (.5 * np.random.randn())
 
-def gen_outputs(output_file="/data/uniparc/synthetic_data/sequence_scores.txt"):
+def gen_kcat_outputs(output_file="/data/uniparc/synthetic_data/sequence_scores.txt"):
     """Create file with scores for sequences"""
 
     if not os.path.exists(output_file):

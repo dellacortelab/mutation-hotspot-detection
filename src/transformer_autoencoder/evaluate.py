@@ -39,10 +39,9 @@ class Evaluator():
                 x, y_truth, mask = x.to(self.device), y_truth.to(self.device), mask.to(self.device)
                 # Pass a batch through the network
                 # import pdb; pdb.set_trace()
-                # (2nd item in tuple is a pooled version of 1st item)
                 y_pred = model(x)
                 # Compute the loss
-                import pdb; pdb.set_trace()
+                # import pdb; pdb.set_trace()
                 # Only compute loss for masked entries
                 # Trick to broadcast from dimension 0...N instead of from N...0 - see https://stackoverflow.com/questions/22603375/numpy-broadcast-from-first-dimension
                 y_pred = (y_pred.T * mask.T).T

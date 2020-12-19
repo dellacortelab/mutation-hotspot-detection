@@ -7,6 +7,7 @@ import os
 import numpy as np
 import sentencepiece as spm
 import torch
+import ast
 
 from .gen_seq_dataset import UniparcDatasetPreprocessor
 
@@ -21,7 +22,7 @@ class ProtSeqDataset(IterableDataset):
 		vocab_size=8000,
 		no_verification=False
 		):
-		super(ProtSeqDataset, self).__init__()
+		super().__init__()
 
 		preproc = UniparcDatasetPreprocessor(
 			dataset_dir=dataset_dir,
@@ -94,7 +95,123 @@ class ProtSeqDataset(IterableDataset):
 		seq_iter = open(self.data_file)
 		return map(self.preprocess_seq, seq_iter)
 
+class ManyToOneDataset(IterableDataset):
+	"""Generic sequence dataset yielding a sequence (as a Tensor of indices) and its corresponding scalar label."""
+	def __init__(self,
+		dataset_dir='/data/uniparc',
+		seq_prefix='sequences',
+		label_prefix='labels',
+		tokenizer_prefix='tokenizer',
+		mode='train',
+		vocab_size=8000,
+		no_verification=False,
+		dataset_generator_class=None
+		):
+		super().__init__()
 
+		if dataset_generator_class is not None:
+			dataset_generator = dataset_generator_class(
+				dataset_dir=dataset_dir,
+				seq_prefix=seq_prefix,
+				label_prefix=label_prefix,
+				tokenizer_prefix=tokenizer_prefix,
+				vocab_size=vocab_size,
+				no_verification=no_verification
+			)
+			dataset_generator.prepare_dataset()
+
+		self.seq_file = os.path.join(dataset_dir, seq_prefix + '_' + mode + '.txt')
+		self.label_file = os.path.join(dataset_dir, label_prefix + '_' + mode + '.txt')
+
+		# Load tokenizer
+		tokenizer_file = os.path.join(dataset_dir, tokenizer_prefix + '.model')
+		self.tokenizer = spm.SentencePieceProcessor(model_file=tokenizer_file)
+		self.true_vocab_size = self.tokenizer.vocab_size()
+
+	def get_vocab_size(self):
+		"""Get the true vocab size, which, for small datasets, may be smaller than
+		the specified vocab size
+		Returns:
+			(int): the true vocab size
+		"""
+		return self.true_vocab_size
+
+	def tokenize(self, sequence):
+		"""Tokenize the sequence
+		Args:
+			sequence (str): the sequence to tokenize
+		Returns:
+			(torch.Tensor (long)): the integer-encoded sequence, with start/end tokens
+		"""
+		# Tokenize sequence
+		encoded_seq = self.tokenizer.encode(sequence, out_type=int, add_bos=True, add_eos=True)
+		encoded_seq = torch.tensor(encoded_seq, dtype=torch.long)
+		return encoded_seq
+
+	def crop_seq(self, sequence):
+		"""Crop the sequence to a given max length
+		Args:
+			sequence (torch.Tensor (long)): the integer-encoded sequence
+		Returns:
+			sequence (torch.Tensor (long)): the sequence, cropped to crop_length
+		"""
+		# Only crop if necessary
+		if self.crop_length is not None and len(sequence) > self.crop_length:
+			max_start_idx = len(sequence) - self.crop_length
+			start_idx = np.random.randint(max_start_idx + 1)
+			return sequence[start_idx:start_idx + self.crop_length]
+
+		return sequence
+
+	def preprocess_seq(self, sequence):
+		"""Conduct preprocessing on each sequence
+		Args:
+			sequence (str): a sequence read from file
+		Returns:
+			sequence (torch.Tensor (long)): the processed sequence
+		"""
+		sequence = self.tokenize(sequence)
+		sequence = self.crop_seq(sequence)
+		return sequence
+
+
+	def preprocess_label(self, label):
+		"""Conduct preprocessing on each label
+		Args:
+			sequence (str): a sequence read from file
+		Returns:
+			sequence (torch.Tensor (long)): the processed sequence
+		"""
+		# Interpret string from file as a scalar or a list of scalars, 
+		# then cast it to a Tensor
+		return = torch.Tensor(ast.literal_eval(label))
+
+	def __iter__(self):
+		"""Return an iterator over the dataset
+		Returns:
+			(Iterable): the iterator
+		"""
+		seq_iter = open(self.seq_file, 'r')
+		seq_iter = map(self.preprocess_seq, seq_iter)
+		label_iter = iter(self.labels)
+		label_iter = map(self.preprocess_label, label_iter)
+		return zip(seq_iter, label_iter)
+
+		
+class MutationActivityDataset(ManyToOneDataset):
+	"""Extension of ManyToOneDataset class, providing functionality specific to the Mutation Activity Dataset"""
+	def __init__(self, *args, **kwargs):
+		super().__init__(args, kwargs)
+
+    def visualize_activity_data(training_data_file="./training_data.npy"):
+        training_data = np.load(training_data_file)
+        a = np.array(list(training_data.values()))[:,1]
+        a = a.astype(float)
+        plt.hist(a)
+        plt.xlabel('Activity')
+        plt.ylabel('Frequency')
+        plt.show()
+        plt.save_fig('training_data.png')
 
 class ShuffleDataset(IterableDataset):
 	def __init__(self, dataset, buffer_size):
