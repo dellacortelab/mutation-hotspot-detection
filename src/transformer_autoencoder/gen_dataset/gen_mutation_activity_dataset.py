@@ -63,6 +63,7 @@ class MutationDatasetGenerator(SeqDatasetGenerator):
             os.makedirs(self.dataset_dir)
 
         # Log metadata for train/val/test split
+        import pdb; pdb.set_trace()
         self.log_sequence_data(np.ones(self.n_seq)*self.seq_length)
 
         with open(self.seq_file, 'w') as seq_file:

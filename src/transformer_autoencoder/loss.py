@@ -7,7 +7,7 @@ from torch import nn
 
 class AutoEncoderLoss(nn.Module):
     def __init__(self, n_classes):
-        super(TransformerAutoEncoder, self).__init__()
+        super().__init__()
 
         self.objective = nn.CrossEntropyLoss()
         self.n_classes = n_classes
@@ -18,7 +18,7 @@ class AutoEncoderLoss(nn.Module):
 
 class AutoEncoderFineTuneLoss(nn.Module):
     def __init__(self, n_classes, reconstruction_weight=1., fine_tune_weight=1.):
-        super(TransformerAutoEncoderReactivityPredictor, self).__init__()
+        super().__init__()
 
         self.reconstruction_weight = reconstruction_weight
         self.fine_tune_weight = fine_tune_weight

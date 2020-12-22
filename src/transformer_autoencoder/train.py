@@ -66,7 +66,7 @@ class Trainer():
             if self.epoch_eval_freq != 0 and e % self.epoch_eval_freq == 0:
                 eval_loss = self.evaluator.eval(self.model)
 
-            for b, x, y_truth in enumerate(self.train_loader):
+            for b, (x, y_truth) in enumerate(self.train_loader):
                 
                 # Eval if specified
                 if self.batch_eval_freq != 0 and b % self.batch_eval_freq == 0:
@@ -92,7 +92,6 @@ class Trainer():
 
         print("Final logging")
         train_item = next(iter(self.train_loader))
-        # import pdb; pdb.set_trace()
         train_x = train_item[0][0].unsqueeze(0).to(self.device)
         train_y = train_item[1][0]
         val_item = next(iter(self.val_loader))

@@ -10,7 +10,7 @@ import numpy as np
 
 class Logger():
     """Generic logger class. Logs loss, checkpoints the model every `chckpt_freq` epochs"""
-    def __init__(self, model_name, chckpt_freq=5, save_model=True, base_savepath='/models', log_report_path='data/logs'):
+    def __init__(self, model_name, chckpt_freq=5, save_model=True, base_savepath='/models', log_report_path='/data/logs'):
         
         self.chckpt_freq = chckpt_freq
         self.save_model = True
@@ -25,6 +25,11 @@ class Logger():
         self.epoch_eval_losses = []
         self.eval_batches = []
         self.eval_epochs = []
+
+        if not os.path.exists(base_savepath):
+            os.makedirs(base_savepath)
+        if not os.path.exists(log_report_path):
+            os.makedirs(log_report_path)
 
     def log_batch(self, batch, train_loss, eval_loss, model):
         """Does end-of-batch logging

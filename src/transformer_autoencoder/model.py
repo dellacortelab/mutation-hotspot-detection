@@ -19,7 +19,7 @@ class AttentionLayer(nn.Module):
         self.lin_k = nn.Linear(d_model, d_model)
         self.lin_v = nn.Linear(d_model, d_model)
         self.softmax = nn.Softmax(dim=2)
-        self.scale_factor = torch.sqrt(torch.Tensor(d_model))
+        self.scale_factor = torch.sqrt(torch.tensor(d_model, dtype=torch.float))
 
     def forward(self, x):
         """
@@ -37,7 +37,8 @@ class AttentionLayer(nn.Module):
         # N x 1 x L
         attn = torch.bmm(q, k)
         attn = self.softmax(attn)
-        attn = attn / scale_factor
+
+        attn = attn / self.scale_factor
         # N x L x d_model
         v = self.lin_v(x)
         # N x d_model
@@ -88,9 +89,9 @@ class TransformerEncoder(nn.Module):
             x ((N x L x d_model) torch.Tensor): the input embeddings
         """
         # x: N x L x d_model
-        bert_out = self.bert(x)
+        bert_out = self.bert(x)[0]
         # out: N x L x d_model
-        out = self.attn(out) + bert_out
+        out = self.attn(bert_out)
         # out: N x 1 x d_model
         return out
     
@@ -219,13 +220,13 @@ class TransformerDecoder(nn.Module):
         out = self.final_linear(out)
         return out
 
-class TransformerAutoEncoderReactivityPredictor(nn.Module):
-    def __init__(self, vocab_size=8000, d_model=768, from_pretrained=False, transformer_autoencoder_path='/models/hydrolase_design/transformer_autoencoder'):
+class TransformerAutoEncoderActivityPredictor(nn.Module):
+    def __init__(self, vocab_size=8000, d_model=768, pred_dim=1, from_pretrained=False, transformer_autoencoder_path='/models/hydrolase_design/transformer_autoencoder'):
         super().__init__()
 
         encoder_path = os.path.join(transformer_autoencoder_path, 'encoder.pt')
         decoder_path = os.path.join(transformer_autoencoder_path, 'decoder.pt')
-        reactivity_predictor_path = os.path.join(transformer_autoencoder_path, 'reactivity_predictor.pt')
+        activity_predictor_path = os.path.join(transformer_autoencoder_path, 'activity_predictor.pt')
 
         if self.from_pretrained:
             if os.path.exists(encoder_path):
@@ -244,13 +245,13 @@ class TransformerAutoEncoderReactivityPredictor(nn.Module):
                     Training decoder from scratch.")
 
         if self.from_pretrained:
-            if os.path.exists(reactivity_predictor_path):
-                self.reactivity_predictor = torch.load(reactivity_predictor_path)
+            if os.path.exists(activity_predictor_path):
+                self.activity_predictor = torch.load(activity_predictor_path)
             else:
-                print("Pretrained was set to True, but no pretrained reactivity network was found. \
-                    Training reactivity predictor from scratch.")
+                print("Pretrained was set to True, but no pretrained activity network was found. \
+                    Training activity predictor from scratch.")
         else:
-            self.last_lin = nn.Linear(d_model, vocab_size)
+            self.last_lin = nn.Linear(d_model, pred_dim)
 
     def encode(self, x):
         return self.encoder(x)
@@ -261,11 +262,11 @@ class TransformerAutoEncoderReactivityPredictor(nn.Module):
     def autoencode(self, x):
         return self.decode(self.encode(x))
 
-    def predict_reactivity(self, x):
+    def predict_activity(self, x):
         return self.last_lin((self.encode(x)))
 
     def forward(self, x):
-        """Run a forward pass that outputs predicted reactivity and 
+        """Run a forward pass that outputs predicted activity and 
         reconstructed input.
         Args:
             x ((N x L) torch.Tensor): an item from the training set
@@ -297,12 +298,12 @@ class TransformerAutoEncoder(nn.Module):
         return ''.join(out_list)
 
 
-class TransformerReactivityPredictor(nn.Module):
-    def __init__(self, d_model=768, vocab_size=8000, from_pretrained=False, model_name='model', base_savepath='/models/hydrolase_design/transformer_reactivity_predictor'):
+class TransformerActivityPredictor(nn.Module):
+    def __init__(self, d_model=768, vocab_size=8000, pred_dim=1, from_pretrained=False, model_name='model', base_savepath='/models/hydrolase_design/transformer_activity_predictor'):
         super().__init__()
 
         encoder_path = os.path.join(base_savepath, 'encoder.pt')
-        reactivity_predictor_path = os.path.join(base_savepath, 'reactivity_predictor.pt')
+        activity_predictor_path = os.path.join(base_savepath, 'activity_predictor.pt')
 
         if from_pretrained:
             if os.path.exists(encoder_path):
@@ -314,22 +315,22 @@ class TransformerReactivityPredictor(nn.Module):
             self.encoder = TransformerEncoder(d_model=d_model, vocab_size=vocab_size)
 
         if from_pretrained:
-            if os.path.exists(reactivity_predictor_path):
-                self.reactivity_predictor = torch.load(reactivity_predictor_path)
+            if os.path.exists(activity_predictor_path):
+                self.activity_predictor = torch.load(activity_predictor_path)
             else:
-                print("Pretrained was set to True, but no pretrained reactivity network was found. \
-                    Training reactivity predictor from scratch.")
+                print("Pretrained was set to True, but no pretrained activity network was found. \
+                    Training activity predictor from scratch.")
         else:
-            self.last_lin = nn.Linear(d_model, vocab_size)
+            self.last_lin = nn.Linear(d_model, pred_dim)
 
     def encode(self, x):
         return self.encoder(x)
 
-    def predict_reactivity(self, x):
+    def predict_activity(self, x):
         return self.last_lin((self.encode(x)))
 
     def forward(self, x):
-        """Run a forward pass that outputs predicted reactivity and 
+        """Run a forward pass that outputs predicted activity and 
         reconstructed input.
         Args:
             x ((N x L) torch.Tensor): an item from the training set

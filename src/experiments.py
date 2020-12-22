@@ -4,20 +4,23 @@
 
 from transformer_autoencoder.dataset.mutation_activity_dataset import MutationActivityDataset
 from transformer_autoencoder.loader import get_sequence_loaders
-from transformer_autoencoder.model import TransformerReactivityPredictor
+from transformer_autoencoder.model import TransformerActivityPredictor
 from transformer_autoencoder.train import Trainer
 
 import torch
 from torch.nn import MSELoss
 
 def hotspot_experiment(
-        base_savepath='/models/hydrolase_design/transformer_reactivity_predictor',
-        model_name='transformer_reactivity_predictor',
+        base_savepath='/models/hydrolase_design/transformer_activity_predictor',
+        model_name='transformer_activity_predictor',
         dataset_dir='/data/mutation_activity',
         vocab_size=200,
         d_model=768,
-        n_epochs=10,
-        no_verification=True
+        n_epochs=1,
+        no_verification=True,
+        # Debugging arguments
+        # n_seq=int(1e5)
+        n_seq=int(5e2)
     ):
     # Dataset
     # 100k amino acid sequences of length 100k amino acid sequences of length 200
@@ -35,13 +38,14 @@ def hotspot_experiment(
     # compared to the variance of mutating other residues
     
     # Load many_to_one dataset into dataset class
-    train_loader, val_loader, test_loader = get_sequence_loaders(dataset_class=MutationActivityDataset, dataset_dir=dataset_dir, no_verification=no_verification, vocab_size=vocab_size)
+    train_loader, val_loader, test_loader = get_sequence_loaders(dataset_class=MutationActivityDataset, dataset_dir=dataset_dir, no_verification=no_verification, vocab_size=vocab_size, n_seq=n_seq)
+    # device = torch.device('cpu') 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Setting objective")
     objective = MSELoss()
     print("Building model")
     # Load network
-    model = TransformerReactivityPredictor(vocab_size=vocab_size, d_model=d_model)
+    model = TransformerActivityPredictor(vocab_size=vocab_size, d_model=d_model)
     print("Building trainer")
     # TODO: specify model path
     trainer = Trainer(model=model, train_loader=train_loader, val_loader=val_loader, objective=objective, 

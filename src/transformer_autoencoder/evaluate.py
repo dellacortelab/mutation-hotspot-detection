@@ -30,7 +30,6 @@ class Evaluator():
         model.eval()
         # Track loss
         eval_losses = []
-        # import pdb; pdb.set_trace()
         # Evaluate model
         with torch.no_grad():
             for x, y_truth in self.val_loader:
