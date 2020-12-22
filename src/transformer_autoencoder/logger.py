@@ -10,7 +10,7 @@ import numpy as np
 
 class Logger():
     """Generic logger class. Logs loss, checkpoints the model every `chckpt_freq` epochs"""
-    def __init__(self, model_name, chckpt_freq=5, save_model=True, base_savepath='data/model_checkpoints/', log_report_path='data/logs'):
+    def __init__(self, model_name, chckpt_freq=5, save_model=True, base_savepath='/models', log_report_path='data/logs'):
         
         self.chckpt_freq = chckpt_freq
         self.save_model = True

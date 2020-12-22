@@ -61,4 +61,4 @@ def finetune_transformer_autoencoder(
     print("Training complete")
 
 if __name__ == '__main__':
-    pretrain_transformer()
+    train_transformer_autoencoder()

@@ -3,7 +3,8 @@
 #######################################################################################################
 
 from torch.utils.data import DataLoader
-from transformer_autoencoder.dataset.seq_dataset import ProtSeqDataset, ShuffleDataset, padding_collate_fn
+from .dataset.uniparc_dataset import ProtSeqDataset
+from .dataset.seq_dataset import ShuffleDataset, padding_collate_fn
 
 # To calculate a good buffer size for protein sequences:
 # 1. For A-Z letters, it is 1 byte/letter
@@ -18,6 +19,7 @@ def get_sequence_loaders(dataset_class=ProtSeqDataset, batch_size=32, vocab_size
     test_dataset = dataset_class(mode='test', vocab_size=vocab_size, dataset_dir=dataset_dir)
     # Create "Shuffle Datasets", which which allow for random sampling to the greatest possible extent
     # within your memory constraints. This is because you can't shuffle an IterableDataset
+    # import pdb; pdb.set_trace()
     train_dataset = ShuffleDataset(train_dataset, buffer_size=buffer_size)
     val_dataset = ShuffleDataset(val_dataset, buffer_size=buffer_size)
     test_dataset = ShuffleDataset(test_dataset, buffer_size=buffer_size)

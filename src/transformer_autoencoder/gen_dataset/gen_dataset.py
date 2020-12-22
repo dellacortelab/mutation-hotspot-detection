@@ -13,7 +13,6 @@ from matplotlib import pyplot as plt
 import numpy as np
 import pickle as pkl
 
-
 class DatasetGenerator():
     """Base class for dataset generators"""
     def __init__(self):
@@ -26,25 +25,26 @@ class SeqDatasetGenerator(DatasetGenerator):
 	"""Base class for generating a sequence dataset"""
 	def __init__(self, 
 		dataset_dir="/data/uniparc",
-		seq_filename="sequences.txt",
-		tokenizer_prefix='uniparc_tokenizer',
+		seq_prefix="sequences",
+		tokenizer_prefix='tokenizer',
 		vocab_size=8000,
-		train_test_val_split=[.8, .1, .1],
+		input_sentence_size=int(1e9),
+		shuffle_input_sentence=True,
+		train_val_test_split=[.8, .1, .1],
 		no_verification=False
 		):
-        super().__init__()
+		super().__init__()
 		self.dataset_dir = dataset_dir
-		self.seq_file = os.path.join(dataset_dir, seq_filename)
-		self.train_seq_file = os.path.join(dataset_dir, 'train.txt')
-		self.test_seq_file = os.path.join(dataset_dir, 'test.txt')
-		self.val_seq_file = os.path.join(dataset_dir, 'val.txt')
+		self.seq_file = os.path.join(dataset_dir, seq_prefix + '.txt')
+		self.train_seq_file = os.path.join(dataset_dir, seq_prefix + '_train.txt')
+		self.val_seq_file = os.path.join(dataset_dir, seq_prefix + '_val.txt')
+		self.test_seq_file = os.path.join(dataset_dir, seq_prefix + '_test.txt')
 		self.dataset_metadata_file = os.path.join(dataset_dir, 'dataset_metadata.pkl')
-		self.uri = uri
-		self.zipped_dataset_file = os.path.join(dataset_dir, os.path.basename(uri))
-		self.unzipped_dataset_file = os.path.splitext(self.zipped_dataset_file)[0]
 		self.tokenizer_file_prefix = os.path.join(dataset_dir, tokenizer_prefix)
 		self.vocab_size = vocab_size
-		self.train_test_val_split = train_test_val_split
+		self.input_sentence_size = input_sentence_size
+		self.shuffle_input_sentence = shuffle_input_sentence
+		self.train_val_test_split = train_val_test_split
 		self.no_verification = no_verification
 
 	def prepare_dataset(self):
@@ -53,39 +53,42 @@ class SeqDatasetGenerator(DatasetGenerator):
 
 		if self.no_verification:
 			print("Performing all steps of dataset generation without user verification. \
-			 	This could take a full day.")
+				This could take a full day.")
 		else:
 			print("Confirming with user at each significant dataset generation step.")
 
-        if not self.no_verification:
-            response = input("About to create sequence file. This could take several hours. Continue? [Y/n]")
-            if response != 'Y':
-                raise ValueError("Sequence file doesn't exist")
-        else:
-            print("About to create sequence file. This could take several hours.")
-		self.prepare_sequences_file()
+		if not os.path.exists(self.seq_file):
+			if not self.no_verification:
+				response = input("About to create sequence file. This could take several hours. Continue? [Y/n]")
+				if response != 'Y':
+					raise ValueError("Sequence file doesn't exist")
+			else:
+				print("About to create sequence file. This could take several hours.")
+			self.prepare_sequences_file()
 
-        if not self.no_verification:
-            response = input("About to create train/test/validation files. This could take several hours. Continue? [Y/n]")
-            if response != 'Y':
-                raise ValueError("Train/test/val split doesn't exist")
-        else:
-            print("About to create train/test/validation files. This could take several hours.")
-		self.split_train_test_val()
+		if not os.path.exists(self.train_seq_file):
+			if not self.no_verification:
+				response = input("About to create train/test/validation files. This could take several hours. Continue? [Y/n]")
+				if response != 'Y':
+					raise ValueError("Train/test/val split doesn't exist")
+			else:
+				print("About to create train/test/validation files. This could take several hours.")
+			self.split_train_val_test()
 
-        if not self.no_verification:
-            response = input("About to create tokenizer. This could take several hours. Continue? [Y/n]")
-            if response != 'Y':
-                raise ValueError("Tokenizer doesn't exist")
-        else:
-            print("About to train tokenizer. This could take several hours.")
-		self.train_tokenizer()
+		if not os.path.exists(self.tokenizer_file_prefix + '.model'):
+			if not self.no_verification:
+				response = input("About to create tokenizer. This could take several hours. Continue? [Y/n]")
+				if response != 'Y':
+					raise ValueError("Tokenizer doesn't exist")
+			else:
+				print("About to train tokenizer. This could take several hours.")
+			self.train_tokenizer()
 
-    def prepare_sequences_file():
-        """To be implemented by child class. May include downloading and unzipping, or generating
-        synthetic sequences, then placing them in self.seq_file, one sequence on each line."""
-        pass
-	
+	def prepare_sequences_file():
+		"""To be implemented by child class. May include downloading and unzipping, or generating
+		synthetic sequences, then placing them in self.seq_file, one sequence on each line."""
+		pass
+
 	def plot_histogram(self, seq_lengths):
 		"""Create histogram of sequence lengths and save to file
 		Args:
@@ -123,65 +126,101 @@ class SeqDatasetGenerator(DatasetGenerator):
 		# Create a histogram figure
 		self.plot_histogram(seq_lengths)
 
-	def split_train_test_val(self):
-		"""Split the dataset betweet training, test, and validation sets"""
-		if not os.path.exists(self.train_seq_file):
-			# Find total number of sequences
-			with open(self.dataset_metadata_file, 'rb') as metadata_file:
-				metadata = pkl.load(metadata_file)
-			n_seq = metadata.n_seq
-			indices = np.arange(n_seq)
-			# Get train indices
-			n_train = int( self.train_test_val_split[0] * n_seq )
-			train_indices = np.random.choice(indices, size=n_train, replace=False)
-			train_indices_set = set(train_indices)
-			remaining_indices = np.setxor1d(indices, train_indices)
-			# Get test indices
-			n_test = int( self.train_test_val_split[1] * n_seq )
-			test_indices = np.random.choice(remaining_indices, size=n_test, replace=False)
-			test_indices_set = set(test_indices)
-			# Get val indices
-			remaining_indices = np.setxor1d(remaining_indices, test_indices)
-			val_indices = remaining_indices
-			val_indices_set = set(val_indices)
-			metadata.train_idx = train_indices
-			metadata.test_idx = test_indices
-			metadata.val_idx = val_indices
-			# Write some metadata about train/test/val split
-			with open(self.dataset_metadata_file, 'wb') as metadata_file:
-				pkl.dump(metadata, metadata_file)
+	def load_dataset_metadata(self):
+		# Find total number of sequences
+		with open(self.dataset_metadata_file, 'rb') as metadata_file:
+			self.metadata = pkl.load(metadata_file)
 
+	def split_train_val_test(self):
+		"""Split the dataset betweet training, test, and validation sets"""
+		# Find total number of sequences
+		with open(self.dataset_metadata_file, 'rb') as metadata_file:
+			metadata = pkl.load(metadata_file)
+		n_seq = metadata.n_seq
+		indices = np.arange(n_seq)
+		# Get train indices
+		n_train = int( self.train_val_test_split[0] * n_seq )
+		train_indices = np.random.choice(indices, size=n_train, replace=False)
+		self.train_indices_set = set(train_indices)
+		remaining_indices = np.setxor1d(indices, train_indices)
+		# Get test indices
+		n_test = int( self.train_val_test_split[1] * n_seq )
+		test_indices = np.random.choice(remaining_indices, size=n_test, replace=False)
+		self.test_indices_set = set(test_indices)
+		# Get val indices
+		remaining_indices = np.setxor1d(remaining_indices, test_indices)
+		val_indices = remaining_indices
+		self.val_indices_set = set(val_indices)
+		metadata.train_idx = train_indices
+		metadata.test_idx = test_indices
+		metadata.val_idx = val_indices
+		# Write some metadata about train/test/val split
+		with open(self.dataset_metadata_file, 'wb') as metadata_file:
+			pkl.dump(metadata, metadata_file)
+
+		# I once hit a segfault here. If you do, try uncommenting the line below for debugging
+		# import faulthandler; faulthandler.enable()
+		with open(self.seq_file, 'r') as seq_file:
+			with open(self.train_seq_file, 'w') as train_file:
+				with open(self.test_seq_file, 'w') as test_file:
+					with open(self.val_seq_file, 'w') as val_file:
+						for i, line in enumerate(seq_file):
+							if i in self.train_indices_set:
+								train_file.write(line)
+							elif i in self.test_indices_set:
+								test_file.write(line)
+							elif i in self.val_indices_set:
+								val_file.write(line)
+							else:
+								raise ValueError("All sequences should be assigned to a train/test/val set")				
+
+	def split_other_dataset_train_val_test(self, other_dataset_file):
+		"""Split another dataset according to the same train/val/test indices. Only works if the dataset
+		is the exact same number of lines"""
+		# Parse file names for other dataset
+		basename = os.path.splitext(other_dataset_file)[0]
+		other_dataset_train_file = basename + '_train.txt'
+		other_dataset_val_file = basename + '_val.txt'
+		other_dataset_test_file = basename + '_test.txt'
+
+		try:
+			self.train_indices_set
+		except AttributeError:
+			self.load_dataset_metadata()
+			self.train_indices_set, self.val_indices_set, self.test_indices_set = set(self.metadata.train_idx), set(self.metadata.val_idx), set(self.metadata.test_idx)
+
+		if not os.path.exists(other_dataset_train_file):
 			# I once hit a segfault here. If you do, try uncommenting the line below for debugging
 			# import faulthandler; faulthandler.enable()
-			with open(self.seq_file, 'r') as seq_file:
-				with open(self.train_seq_file, 'w') as train_file:
-					with open(self.test_seq_file, 'w') as test_file:
-						with open(self.val_seq_file, 'w') as val_file:
-							for i, line in enumerate(seq_file):
-								if i in train_indices_set:
+			with open(other_dataset_file, 'r') as other_file:
+				with open(other_dataset_train_file, 'w') as train_file:
+					with open(other_dataset_val_file, 'w') as val_file:
+						with open(other_dataset_test_file, 'w') as test_file:
+							for i, line in enumerate(other_file):
+								if i in self.train_indices_set:
 									train_file.write(line)
-								elif i in test_indices_set:
-									test_file.write(line)
-								elif i in val_indices_set:
+								elif i in self.val_indices_set:
 									val_file.write(line)
+								elif i in self.test_indices_set:
+									test_file.write(line)
 								else:
-									raise ValueError("All sequences should be assigned to a train/test/val set")				
+									raise ValueError("All sequences should be assigned to a train/val/test set")	
 
 	def train_tokenizer(self):
 		"""Train a tokenizer on the training data if a trained tokenizer doesn't exist"""
-		if not os.path.exists(self.tokenizer_file_prefix + '.model'):
-			
-			spm.SentencePieceTrainer.train(
-				input=self.train_seq_file, 
-				model_prefix=self.tokenizer_file_prefix, 
-				vocab_size=self.vocab_size, 
-				hard_vocab_limit=False,
-				add_dummy_prefix=False,
-				pad_id=0,
-				bos_id=1,
-				eos_id=2,
-				unk_id=3
-			)
+		spm.SentencePieceTrainer.train(
+			input=self.train_seq_file, 
+			model_prefix=self.tokenizer_file_prefix, 
+			vocab_size=self.vocab_size, 
+			hard_vocab_limit=False,
+			add_dummy_prefix=False,
+			input_sentence_size=self.input_sentence_size,
+			shuffle_input_sentence=self.shuffle_input_sentence,
+			pad_id=0,
+			bos_id=1,
+			eos_id=2,
+			unk_id=3
+		)
 
 class SeqDatasetMetadata():
 	"""Data class that holds metadata about the dataset"""
@@ -207,7 +246,7 @@ class SeqDatasetMetadata():
 		
 		return f"Number of sequences: {n_seq}\n" + \
 				f"Number of train items: {train_len}\n" + \
-            f"Number of test items: {test_len}\n" + \
+				f"Number of test items: {test_len}\n" + \
 				f"Number of val items: {val_len}"
 
 def check_dataset_metadata(file_path='/data/uniparc/dataset_metadata.pkl'):
@@ -219,3 +258,4 @@ def check_dataset_metadata(file_path='/data/uniparc/dataset_metadata.pkl'):
 # Remove all files except fasta file
 # Be careful using this! Make sure you are in the correct directory
 # ls -1 | grep -v 'fasta' | xargs rm -f
+# ls -1 | grep -v 'tokenizer' | xargs rm -f

@@ -6,12 +6,12 @@
 import torch
 from torch.optim import Adam
 
-from common.logger import Logger
-from transformer.evaluate import Evaluator
+from .logger import Logger
+from .evaluate import Evaluator
 
 class Trainer():
     """Vanilla trainer - preset optimizer, learning rate, logger, etc."""
-    def __init__(self, model, train_loader, val_loader, objective, lr=None, optimizer=None, logger=None, batch_eval_freq=0, epoch_eval_freq=1, model_name='model', device=None):
+    def __init__(self, model, train_loader, val_loader, objective, lr=None, optimizer=None, logger=None, batch_eval_freq=0, epoch_eval_freq=1, base_savepath='/model', model_name='model', device=None):
         """Initialize all objects needed for Trainer
         Args:
             model (nn.Module): the model to train
@@ -44,7 +44,7 @@ class Trainer():
         if logger is not None:
             self.logger = logger
         else:
-            self.logger = Logger(model_name=model_name)
+            self.logger = Logger(base_savepath=base_savepath, model_name=model_name)
 
         if device is not None:
             self.device = device
@@ -59,7 +59,6 @@ class Trainer():
         self.model.train()
         # Initialize eval_loss
         eval_loss = None
-        # self.model.double()
 
         for e in range(n_epochs):
 
@@ -67,7 +66,7 @@ class Trainer():
             if self.epoch_eval_freq != 0 and e % self.epoch_eval_freq == 0:
                 eval_loss = self.evaluator.eval(self.model)
 
-            for b, (x, y_truth, mask) in enumerate(self.train_loader):
+            for b, x, y_truth in enumerate(self.train_loader):
                 
                 # Eval if specified
                 if self.batch_eval_freq != 0 and b % self.batch_eval_freq == 0:
@@ -75,16 +74,11 @@ class Trainer():
 
                 print("Mem: ", torch.cuda.memory_allocated())
                 # Put data on the GPU
-                x, y_truth, mask = x.to(self.device), y_truth.to(self.device), mask.to(self.device)
+                x, y_truth = x.to(self.device), y_truth.to(self.device)
                 # Zero the gradients on the model parameters
                 self.optimizer.zero_grad()
                 # Pass a batch through the network
                 y_pred = self.model(x)
-                # Compute the loss only on masked values
-                y_pred = (y_pred.T * mask.T).T
-                # Transpose to match requirement for nn.CrossEntropyLoss
-                y_pred = torch.transpose(y_pred, 1, 2)
-                y_truth = y_truth * mask
                 train_loss = self.objective(y_pred, y_truth)
                 # Compute the gradient of the loss w.r.t. the network parameters
                 train_loss.backward()

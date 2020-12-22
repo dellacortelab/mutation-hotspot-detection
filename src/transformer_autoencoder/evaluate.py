@@ -33,21 +33,13 @@ class Evaluator():
         # import pdb; pdb.set_trace()
         # Evaluate model
         with torch.no_grad():
-            for x, y_truth, mask in self.val_loader:
+            for x, y_truth in self.val_loader:
                 print("Mem: ", torch.cuda.memory_allocated())
                 # Put data on GPU
-                x, y_truth, mask = x.to(self.device), y_truth.to(self.device), mask.to(self.device)
+                x, y_truth = x.to(self.device), y_truth.to(self.device)
                 # Pass a batch through the network
-                # import pdb; pdb.set_trace()
                 y_pred = model(x)
                 # Compute the loss
-                # import pdb; pdb.set_trace()
-                # Only compute loss for masked entries
-                # Trick to broadcast from dimension 0...N instead of from N...0 - see https://stackoverflow.com/questions/22603375/numpy-broadcast-from-first-dimension
-                y_pred = (y_pred.T * mask.T).T
-                # Transpose to match requirement for nn.CrossEntropyLoss
-                y_pred = torch.transpose(y_pred, 1, 2)
-                y_truth = y_truth * mask
                 loss = self.objective(y_pred, y_truth)
                 eval_losses.append(loss.item())
         
