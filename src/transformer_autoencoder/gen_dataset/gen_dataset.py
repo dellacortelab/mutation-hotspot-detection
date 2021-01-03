@@ -119,7 +119,6 @@ class SeqDatasetGenerator(DatasetGenerator):
         Args:
             seq_lengths (np.ndarray): array of sequence lengths	
         """
-        import pdb; pdb.set_trace()
         metadata = SeqDatasetMetadata(n_seq=len(seq_lengths), seq_lengths=seq_lengths)
         # Log sequence data
         with open(self.dataset_metadata_file, 'wb') as metadata_file:

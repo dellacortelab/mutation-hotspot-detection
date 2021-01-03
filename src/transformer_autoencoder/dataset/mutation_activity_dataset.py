@@ -10,3 +10,13 @@ class MutationActivityDataset(ManyToOneDataset):
             **kwargs,
             dataset_generator_class=MutationDatasetGenerator
         )
+
+    def visualize_activity_data(self, training_data_file="./training_data.npy"):
+        training_data = np.load(training_data_file)
+        a = np.array(list(training_data.values()))[:,1]
+        a = a.astype(float)
+        plt.hist(a)
+        plt.xlabel('Activity')
+        plt.ylabel('Frequency')
+        plt.show()
+        plt.save_fig('training_data.png')

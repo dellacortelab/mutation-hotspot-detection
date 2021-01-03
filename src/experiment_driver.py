@@ -6,21 +6,31 @@ from transformer_autoencoder.dataset.mutation_activity_dataset import MutationAc
 from transformer_autoencoder.loader import get_sequence_loaders
 from transformer_autoencoder.model import TransformerActivityPredictor
 from transformer_autoencoder.train import Trainer
+from transformer_autoencoder.experiments import get_summary_plots
 
 import torch
 from torch.nn import MSELoss
 
+
+
+
 def hotspot_experiment(
         base_savepath='/models/hydrolase_design/transformer_activity_predictor',
         model_name='transformer_activity_predictor',
-        dataset_dir='/data/mutation_activity',
-        vocab_size=200,
-        d_model=768,
-        n_epochs=1,
+        # dataset_dir='/data/mutation_activity/dataset_mini',
+        dataset_dir='/data/mutation_activity/dataset',
+        # log_dir='/data/mutation_activity/logs_mini',
+        log_dir='/data/mutation_activity/logs',
+        n_epochs=4,
+        batch_eval_freq=100,
+        epoch_eval_freq=1,
         no_verification=True,
-        # Debugging arguments
-        # n_seq=int(1e5)
-        n_seq=int(5e2)
+        # Hyperparameters
+        # n_seq=int(1e2)
+        vocab_size=20,
+        d_model=768,
+        batch_size=32,
+        n_seq=int(1e4)
     ):
     # Dataset
     # 100k amino acid sequences of length 100k amino acid sequences of length 200
@@ -37,8 +47,15 @@ def hotspot_experiment(
     # neutral by examining the variance of the network's predictions when we mutate that residue
     # compared to the variance of mutating other residues
     
+    # Set seeds
+    import torch
+    import numpy as np
+    np.random.seed(0)
+    torch.manual_seed(0)
+
+
     # Load many_to_one dataset into dataset class
-    train_loader, val_loader, test_loader = get_sequence_loaders(dataset_class=MutationActivityDataset, dataset_dir=dataset_dir, no_verification=no_verification, vocab_size=vocab_size, n_seq=n_seq)
+    train_loader, val_loader, test_loader = get_sequence_loaders(dataset_class=MutationActivityDataset, dataset_dir=dataset_dir, batch_size=batch_size, no_verification=no_verification, vocab_size=vocab_size, n_seq=n_seq)
     # device = torch.device('cpu') 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Setting objective")
@@ -48,11 +65,12 @@ def hotspot_experiment(
     model = TransformerActivityPredictor(vocab_size=vocab_size, d_model=d_model)
     print("Building trainer")
     # TODO: specify model path
-    trainer = Trainer(model=model, train_loader=train_loader, val_loader=val_loader, objective=objective, 
-        base_savepath=base_savepath, model_name=model_name, device=device)
+    trainer = Trainer(model=model, train_loader=train_loader, val_loader=val_loader, objective=objective, batch_size=batch_size, log_dir=log_dir, 
+        base_savepath=base_savepath, model_name=model_name, device=device, batch_eval_freq=batch_eval_freq, epoch_eval_freq=epoch_eval_freq)
     print("Training model")
     trainer.train(n_epochs=n_epochs)
-    print("Training complete")
+    print("Training complete") 
+    get_summary_plots(model=model, device=device, log_dir=log_dir, dataset_dir=dataset_dir)
     # Results
     # Plot loss over time
     # Plot activity variance across residues
@@ -61,6 +79,9 @@ def hotspot_experiment(
     # to top 10 detrimental positions, and designation: flexible to top 30 variance positions not
     # in beneficial/detrimental
     # Compare 
+
+    # TODO: Analyze results, see if we can identify residues
+    # TODO: Implement data parallelism
 
 if __name__ == "__main__":
     hotspot_experiment()

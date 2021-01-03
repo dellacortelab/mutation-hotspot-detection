@@ -26,6 +26,7 @@ def get_sequence_loaders(dataset_class=ProtSeqDataset, batch_size=32, vocab_size
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
+        # WARNING: specifying num_workers breaks this and yields a bunch of batches with the same contents
         # num_workers=16,
         pin_memory=True,
         collate_fn=padding_collate_fn

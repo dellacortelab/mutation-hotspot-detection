@@ -10,14 +10,14 @@ import numpy as np
 
 class Logger():
     """Generic logger class. Logs loss, checkpoints the model every `chckpt_freq` epochs"""
-    def __init__(self, model_name, chckpt_freq=5, save_model=True, base_savepath='/models', log_report_path='/data/logs'):
+    def __init__(self, model_name, chckpt_freq=5, save_model=True, base_savepath='/models', log_dir='/data/logs'):
         
         self.chckpt_freq = chckpt_freq
         self.save_model = True
         self.base_savepath = base_savepath
         self.model_savepath = os.path.join(base_savepath, model_name)
-        self.batch_log_report_path = os.path.join(log_report_path, model_name + '_batch_loss.png')
-        self.epoch_log_report_path = os.path.join(log_report_path, model_name + '_epoch_loss.png')
+        self.batch_log_report_path = os.path.join(log_dir, model_name + '_batch_loss.png')
+        self.epoch_log_report_path = os.path.join(log_dir, model_name + '_epoch_loss.png')
 
         self.batch_training_losses = []
         self.epoch_training_losses = []
@@ -28,8 +28,8 @@ class Logger():
 
         if not os.path.exists(base_savepath):
             os.makedirs(base_savepath)
-        if not os.path.exists(log_report_path):
-            os.makedirs(log_report_path)
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
 
     def log_batch(self, batch, train_loss, eval_loss, model):
         """Does end-of-batch logging
@@ -54,12 +54,11 @@ class Logger():
                 FloatTensor. A FloatTensor will lead to memory issues.
             model (nn.Module): the neural network model
         """
+        n_losses = 10
         # Get avg loss
-        avg_batch_loss = sum(self.batch_training_losses) / len(self.batch_training_losses)
+        avg_batch_loss = sum(self.batch_training_losses[-n_losses:]) / n_losses
         # Track loss
         self.epoch_training_losses.append(avg_batch_loss)
-        # Reset batch loss
-        self.batch_training_losses = []
 
         # Track eval loss
         if eval_loss is not None:
@@ -77,7 +76,6 @@ class Logger():
         """
         if self.save_model:
             torch.save(model.state_dict(), self.model_savepath + '.pt')
-        
         # Save per-batch losses
         fig = plt.figure()
         plt.plot(np.arange(len(self.batch_training_losses)), self.batch_training_losses, label='training loss')

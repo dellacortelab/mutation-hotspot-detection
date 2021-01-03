@@ -33,7 +33,7 @@ class Evaluator():
         # Evaluate model
         with torch.no_grad():
             for x, y_truth in self.val_loader:
-                print("Mem: ", torch.cuda.memory_allocated())
+                # print("Mem: ", torch.cuda.memory_allocated())
                 # Put data on GPU
                 x, y_truth = x.to(self.device), y_truth.to(self.device)
                 # Pass a batch through the network
