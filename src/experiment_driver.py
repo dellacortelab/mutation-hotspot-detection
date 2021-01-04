@@ -11,27 +11,69 @@ from transformer_autoencoder.experiments import get_summary_plots
 import torch
 from torch.nn import MSELoss
 
-
+##########################
+# Observations: This task relies on position much more than amino acid identity and context. The power of 
+# Transformers comes mostly from their ability to combine information across the sequence, whereas this 
+# task tests primarily the ability to use positional information (not what Transformers excel at)
+#
+# Ideas to simplify:
+# - ^ = done
+# - * = high priority
+#
+# - Dataset
+# - *No stochasticity in assignment of score. Only hotspot residues contribute to score (and thus the loss), not all residues
+# - *Only train one mutation
+# - - Mutation at one position - Hydrophilics score 2, hydrophobics score 0, other score 1
+# - *Train classification model - classify high, medium, or low activity based on number of beneficial mutations
+# - Train on all possible mutations
+# - Reduce vocabulary to binary
+# - 
+# - Training/model
+# - Add learning rate hyperparameter
+# - Train for longer
+# - Substitute attention for Bert pooling
+# - ^Implement correct version of attention
+# - ^Figure out optimal score vs average score
+# - - Optimal score: Predict 2 for hydrophilics, 0 for hydrophobics, 1 for other
+# - - Optimal loss: 0
+# - - Average score: 1
+# - - Average score loss: (0^2*6 + 1^2*7 + 1^2*7)/20 = .7
+# - 
+# - Evaluation
+# - ^Get means and variances only for mutated amino acid, not for original
+# - - *Highlight beneficial bars in green, detrimental in red, and flexible in blue
+# - - *Visualize difference only at hotspot residues
+# - Visualize difference between prediction for mutation vs. original
+# - Compare predictions for mutations present in the dataset to predictions for mutations not in the dataset
+# - *Visualize attention in pooling layer
+# - *Visualize distance matrix between embeddings (hopefully hydrophobic will be close to hydrophobic, etc.)
+##########################
 
 
 def hotspot_experiment(
         base_savepath='/models/hydrolase_design/transformer_activity_predictor',
         model_name='transformer_activity_predictor',
-        # dataset_dir='/data/mutation_activity/dataset_mini',
         dataset_dir='/data/mutation_activity/dataset',
-        # log_dir='/data/mutation_activity/logs_mini',
         log_dir='/data/mutation_activity/logs',
         n_epochs=4,
         batch_eval_freq=100,
         epoch_eval_freq=1,
         no_verification=True,
         # Hyperparameters
-        # n_seq=int(1e2)
-        vocab_size=20,
+        vocab_size=24,
         d_model=768,
         batch_size=32,
-        n_seq=int(1e4)
+        n_seq=int(1e4),
+        dataset_simplicity="simple_0",
+        debug=True
+        # debug=False
     ):
+    if debug:
+        n_seq=int(1e2)
+        log_dir='/data/mutation_activity/logs_mini'
+        dataset_dir='/data/mutation_activity/dataset_mini'
+
+
     # Dataset
     # 100k amino acid sequences of length 100k amino acid sequences of length 200
     # Each is the same sequence as a wild type, but with 10 mutations
@@ -52,19 +94,19 @@ def hotspot_experiment(
     import numpy as np
     np.random.seed(0)
     torch.manual_seed(0)
+    # Cuda seed?
 
-
-    # Load many_to_one dataset into dataset class
+    # Load data into dataloaders
     train_loader, val_loader, test_loader = get_sequence_loaders(dataset_class=MutationActivityDataset, dataset_dir=dataset_dir, batch_size=batch_size, no_verification=no_verification, vocab_size=vocab_size, n_seq=n_seq)
-    # device = torch.device('cpu') 
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device('cpu') 
+    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Setting objective")
     objective = MSELoss()
     print("Building model")
     # Load network
+    # TODO: specify model path
     model = TransformerActivityPredictor(vocab_size=vocab_size, d_model=d_model)
     print("Building trainer")
-    # TODO: specify model path
     trainer = Trainer(model=model, train_loader=train_loader, val_loader=val_loader, objective=objective, batch_size=batch_size, log_dir=log_dir, 
         base_savepath=base_savepath, model_name=model_name, device=device, batch_eval_freq=batch_eval_freq, epoch_eval_freq=epoch_eval_freq)
     print("Training model")

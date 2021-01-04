@@ -27,7 +27,17 @@ class MutationDatasetGenerator(SeqDatasetGenerator):
         self.gen_activity_data()
 
     def define_hotspots(self, n_beneficial=10, n_detrimental=10, n_flexible=30, save=True):
-
+        """Define beneficial, detrimental, and flexible hotspots for a sequence
+        Args:
+            n_beneficial (int): the number of beneficial indices
+            n_detrimental (int): the number of detrimental indices
+            n_flexible (int): the number of flexible indices
+            save (bool): whether to save the indices
+        Returns:
+            beneficial_indices ((seq_length) np.ndarray): the beneficial indices
+            detrimental_indices ((seq_length) np.ndarray): the detrimental indices
+            flexible_indices ((seq_length) np.ndarray): the flexible indices
+        """
         indices = np.arange(self.seq_length)
         # Get beneficial indices
         beneficial_indices = np.random.choice(indices, size=n_beneficial, replace=False)
@@ -39,62 +49,97 @@ class MutationDatasetGenerator(SeqDatasetGenerator):
         flexible_indices = np.random.choice(remaining_indices, size=n_flexible, replace=False)
 
         if save:
-            if not os.path.exists(self.dataset_dir):
-                os.makedirs(self.dataset_dir)
             save_file = os.path.join(self.dataset_dir, 'good_bad_flex_indices.npz')
             np.savez(save_file, beneficial=beneficial_indices, detrimental=detrimental_indices, flexible=flexible_indices)
 
         return beneficial_indices, detrimental_indices, flexible_indices
 
-    def assign_activity(self, mutation_sites, mut_sequence, beneficial_indices, detrimental_indices, flexible_indices):
-
-        # Assign mutation impacts
-        impact = np.random.uniform(low = -0.1, high = 0.1, size = 200) #most have no impact 
-        impact[beneficial_indices] = np.random.uniform(low = 0.3, high = 0.6, size = 10)
-        impact[detrimental_indices] = np.random.uniform(low = -0.6, high = -0.3, size = 10)
-
-        # At flexible sites, hydrophilic are beneficial, hydrophobic are detrimental
+    def assign_activity(self, mut_sites, mut_values, beneficial_indices, detrimental_indices, flexible_indices):
+        """Assign a number representing the enzyme activity of the sequence, based on whether mutations
+        occur at beneficial locations, detrimental locations, flexible locations, or neutral locations.
+        """
+        # At flexible sites, polar hydrophilic are beneficial, hydrophobic are detrimental
         hydrophobics = 'AILMFCV'
         hydrophilics = 'RNDQEHK'
-        for idx in flexible_indices:
-            if mut_sequence[idx] in hydrophilics:
-                impact[idx] = np.random.uniform(low = 0.3, high = 0.6)
-            elif mut_sequence[idx] in hydrophobics:
-                impact[idx] = np.random.uniform(low = -0.6, high = -0.3)
-            else:
-                impact[idx] = np.random.uniform(low = -0.3, high = 0.3)
+
+        # Start with a baseline positive activity
+        activity = 1.
+        for mut_site, mut_value in zip(mut_sites, mut_values):
+            if mut_value in beneficial_indices:
+                activity += np.random.uniform(low = 0.3, high = 0.6)
+            elif mut_value in detrimental_indices:
+                activity += np.random.uniform(low = -0.6, high = -0.3)    
+            # The way we handl flexible indices isn't great - we only
+            # give a hydrophilic/hydrophobic bonus/penalty if it is a 
+            # mutated residue, not for all flexible residues. A better 
+            # way to do this would be to assign a value for all flexible
+            # residues. We could expect better embeddings in this case,
+            # and potentially make a cool distance matrix for the embeddings
+            elif mut_value in flexible_indices:
+                if mut_value in hydrophilics:
+                    activity += np.random.uniform(low = 0.3, high = 0.6)
+                elif mut_value in hydrophobics:
+                    activity += np.random.uniform(low = -0.6, high = -0.3)
+                else:
+                    activity += np.random.uniform(low = -0.3, high = 0.3)
+
+        # # Assign mutation impacts
+        # impact = np.random.uniform(low = -0.1, high = 0.1, size = 200) #most have no impact 
+        # impact[beneficial_indices] = np.random.uniform(low = 0.3, high = 0.6, size = 10)
+        # impact[detrimental_indices] = np.random.uniform(low = -0.6, high = -0.3, size = 10)
+
+        # for idx in flexible_indices:
+        #     if mut_sequence[idx] in hydrophilics:
+        #         impact[idx] = np.random.uniform(low = 0.3, high = 0.6)
+        #     elif mut_sequence[idx] in hydrophobics:
+        #         impact[idx] = np.random.uniform(low = -0.6, high = -0.3)
+        #     else:
+        #         impact[idx] = np.random.uniform(low = -0.3, high = 0.3)
         
         #assess the activity:
-        activity = max(0, 1 + np.sum(impact[mutation_sites]))
+        activity = max(0, activity)
 
         return activity
 
-    def gen_activity_data(self, seq=np.array(list('MNFPRASRLMQAAVLGGLMAVSAAATAQTNPYARGPNPTAASLEASAGPFTVRSFTVSRPSGYGAGTVYYPTNAGGTVGAIAIVPGYTARQSSIKWWGPRLASHGFVVITIDTNSTLDQPSSRSSQQMAALRQVASLNGTSSSPIYGKVDTARMGVMGWSMGGGGSLISAANNPSLKAAAPQAPWDSSTNFSSVTVPTLI'))):
-
-        aminoacids = "ACDEFGHIKLMNPQRSTVWY"
-
-
+    def gen_activity_data(
+        self, 
+        n_mutations=10,
+        seq=np.array(list('MNFPRASRLMQAAVLGGLMAVSAAATAQTNPYARGPNPTAASLEASAGPFTVRSFTVSRPSGYGAGTVYYPTNAGGTVGAIAIVPGYTARQSSIKWWGPRLASHGFVVITIDTNSTLDQPSSRSSQQMAALRQVASLNGTSSSPIYGKVDTARMGVMGWSMGGGGSLISAANNPSLKAAAPQAPWDSSTNFSSVTVPTLI')),
+        amino_acids=np.array(list("ACDEFGHIKLMNPQRSTVWY"))
+    ):
         beneficial_indices, detrimental_indices, flexible_indices = self.define_hotspots()
-
-        if not os.path.exists(self.dataset_dir):
-            os.makedirs(self.dataset_dir)
 
         # Log metadata for train/val/test split
         self.log_sequence_data(np.ones(self.n_seq)*self.seq_length)
 
         with open(self.seq_file, 'w') as seq_file:
             with open(self.label_file, 'w') as label_file:
+
+                # Create lookup table for amino acid indices for O(1) lookup when setting mutant residues
+                amino_acid_indices = { character:idx for idx, character in enumerate(amino_acids) }
+
                 # Iterate for full training data:
                 for i in range(self.n_seq):
+
                     # create a mutation:
                     mut_sequence = copy.deepcopy(seq)
-                    mutation_sites  = np.random.randint(0, self.seq_length, 10)
-                    mut_values = [ aminoacids[mv] for mv in np.random.randint(0,20,10) ]
-                    mut_sequence[mutation_sites] = mut_values
+                    mut_sites  = np.random.randint(0, self.seq_length, n_mutations)
+                    current_amino_acids = seq[mut_sites]
+
+                    # Choose mutant values from amino acids not equal to the current amino acid
+                    mut_values = np.empty(n_mutations, dtype=str)
+                    for i, current_amino_acid in enumerate(current_amino_acids):
+                        current_amino_acid_idx = amino_acid_indices[current_amino_acid]
+                        eligible_mutations = np.empty( len(amino_acids) - 1, dtype=str)
+                        eligible_mutations[:current_amino_acid_idx] = amino_acids[:current_amino_acid_idx]
+                        eligible_mutations[current_amino_acid_idx:] = amino_acids[current_amino_acid_idx+1:]
+                        mut_values[i] = np.random.choice(eligible_mutations)
+
+                    mut_sequence[mut_sites] = mut_values
                     # assess the activity:
                     activity = self.assign_activity(
-                        mutation_sites=mutation_sites,
-                        mut_sequence=mut_sequence, 
+                        mut_sites=mut_sites,
+                        mut_values=mut_values, 
                         beneficial_indices=beneficial_indices, 
                         detrimental_indices=detrimental_indices, 
                         flexible_indices=flexible_indices

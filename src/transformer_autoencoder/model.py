@@ -9,40 +9,61 @@ from torch import nn
 from transformers import BertModel, BertConfig
 
 class AttentionLayer(nn.Module):
-    # TODO: Figure out how to get queries
-    def __init__(self, bert_config):
+    """Attention layer implemented as in self-attention, but with a trainable prototype query
+    vector instead of a query that is a transformation of the input. Justification: for the 
+    purposes of autoencoding and predicting, the prototype vector for summarizing the sequence 
+    does not depend on different tokens - it is always has the same job: summarize the sequence 
+    for e.g. an autoencoding task (as opposed to the job of predicting the next character, in 
+    which the prototype vector changes based on the character preceding the character to predict.)
+    """
+    def __init__(self, d_model):
         super().__init__()
 
-        d_model = bert_config.hidden_size
         # TODO: add multiple heads
-        self.lin_q = nn.Linear(d_model, d_model)
+        # The query should be a trainable prototype vector of weights, such that multiplying Q by K^T is
+        # just multiplying K by a linear layer from d_model to 1
+        self.lin_q = nn.Linear(d_model, 1)
         self.lin_k = nn.Linear(d_model, d_model)
         self.lin_v = nn.Linear(d_model, d_model)
         self.softmax = nn.Softmax(dim=2)
         self.scale_factor = torch.sqrt(torch.tensor(d_model, dtype=torch.float))
 
-    def forward(self, x):
+    def forward(self, x, return_attention_weights=False):
         """
         Args:
             x ((N x L x d_model) torch.Tensor): the input embeddings
+            return_attention_weights (bool): whether to return the tensor weights
+                with the network output
         """
-        # N x L x d_model
-        q = self.lin_q(x)
-        # Sum over L dimension - output N x 1 x d_model
-        q = torch.sum(q, dim=1, keepdim=True)
-        # N x L x d_model
+        # # Previous attention setup
+        # # x: N x L x d_model
+        # q = self.lin_q(x)
+        # # q: N x L x d_model
+        # q = torch.sum(q, dim=1, keepdim=True)
+        # # q: N x 1 x d_model
+        # k = self.lin_k(x)
+        # k = torch.transpose(k, 1, 2)
+        
+        # x: N x L x d_model
         k = self.lin_k(x)
-        # N x d_model x L
-        k = torch.transpose(k, 1, 2)
-        # N x 1 x L
-        attn = torch.bmm(q, k)
-        attn = self.softmax(attn)
-
+        # k: N x L x d_model
+        # This is where we differ from self-attention: we use a learnable prototype Q vector, 
+        # implemented as a linear layer, instead of transforming the input to get queries
+        attn = self.lin_q(k)
+        # attn: N x L x 1
+        attn = torch.transpose(attn, 1, 2)
+        # attn: N x 1 x L
         attn = attn / self.scale_factor
-        # N x L x d_model
+        attn = self.softmax(attn)
+        # attn: N x 1 x L
         v = self.lin_v(x)
-        # N x d_model
+        # v: N x L x d_model
         out = torch.bmm(attn, v).squeeze(1)
+        # out: N x d_model
+
+        if return_attention_weights:
+            return out, attn
+        
         return out
 
 class ManyToOneAttentionBlock(nn.Module):
@@ -50,25 +71,27 @@ class ManyToOneAttentionBlock(nn.Module):
         super().__init__()
 
         config = BertConfig(vocab_size=vocab_size, hidden_size=d_model)
-        self.attn = AttentionLayer(config)
+        self.attn = AttentionLayer(d_model)
         self.lin = nn.Linear(d_model, d_model)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.layer_norm_1 = nn.LayerNorm(d_model, eps=config.layer_norm_eps)
-        self.layer_norm_2 = nn.LayerNorm(d_model, eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(d_model, eps=config.layer_norm_eps)
 
-    def forward(self, x):
+    def forward(self, x, return_attention_weights=False):
         """
         Args:
             x ((N x L x d_model) torch.Tensor): the input embeddings
+            return_attention_weights (bool): whether to return the tensor weights
+                with the network output
         """
-        # Attention Block
+        if return_attention_weights:
+            out, attn_weights = self.attn(x, return_attention_weights=return_attention_weights)
+            out = self.dropout(out)
+            out = self.layer_norm(x + out)
+            return out, attn_weights
+
         out = self.attn(x)
         out = self.dropout(out)
-        block_1_out = self.layer_norm_1(x + out)
-        # Last Linear Block
-        out = self.lin(block_1_out)
-        out = self.dropout(out)
-        out = self.layer_norm_2(out + block_1_out)
+        out = self.layer_norm(x + out)
         return out
 
 
@@ -78,23 +101,53 @@ class TransformerEncoder(nn.Module):
 
         config = BertConfig(vocab_size=vocab_size, hidden_size=d_model)
         self.bert = BertModel(config)
-        self.attn = AttentionLayer(config)
-        self.bn = nn.LayerNorm(d_model, eps=config.layer_norm_eps)
-        self.lin = nn.Linear(d_model, d_model)
+        self.attn = ManyToOneAttentionBlock(d_model=d_model, vocab_size=vocab_size)
         
+    def compute_attention(self, x):
+        return self.attn.compute_attention(out)
 
-    def forward(self, x):
+    def forward(self, x, return_attention_weights=False):
         """
         Args:
             x ((N x L x d_model) torch.Tensor): the input embeddings
+            return_attention_weights (bool): whether to return the tensor weights
+                with the network output
         """
         # x: N x L x d_model
-        bert_out = self.bert(x)[0]
+        out = self.bert(x)[0]
         # out: N x L x d_model
-        out = self.attn(bert_out)
+
+        if return_attention_weights:
+            out, attn_weights = self.attn(x, return_attention_weights=return_attention_weights)
+            # out: N x 1 x d_model
+            return out, attn_weights
+
+        out = self.attn(out)
         # out: N x 1 x d_model
         return out
-    
+
+
+class LastLinearBlock(nn.Module):
+    """Linear layer with dropout skip connection (no non-linearity because softmax happens in the loss)
+    """
+    def __init__(self, d_model=768):
+        super().__init__()
+
+        config = BertConfig(vocab_size=vocab_size, hidden_size=d_model)
+        self.lin = nn.Linear(d_model, d_model)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.layer_norm = nn.LayerNorm(d_model, eps=config.layer_norm_eps)
+
+    def forward(self, x):
+        """Pass x through the linear layer
+        Args:
+            x ((N x d_model) torch.Tensor): the embedding from the TransformerEncoder
+        """
+        # Last Linear Block
+        out = self.lin(x)
+        out = self.dropout(out)
+        out = self.layer_norm(x + out)
+        return out
 
 
 class CrossAttentionBlock(nn.Module):
@@ -321,18 +374,24 @@ class TransformerActivityPredictor(nn.Module):
                 print("Pretrained was set to True, but no pretrained activity network was found. \
                     Training activity predictor from scratch.")
         else:
-            self.last_lin = nn.Linear(d_model, pred_dim)
+            self.last_lin = LastLinearBlock(d_model=d_model)
 
     def encode(self, x):
         return self.encoder(x)
 
-    def predict_activity(self, x):
-        return self.last_lin((self.encode(x)))
-
-    def forward(self, x):
+    def forward(self, x, return_attention_weights=False):
         """Run a forward pass that outputs predicted activity and 
         reconstructed input.
         Args:
             x ((N x L) torch.Tensor): an item from the training set
+            return_attention_weights (bool): whether to return the tensor weights
+                with the network output
         """
-        return self.last_lin((self.encode(x)))
+        if return_attention_weights:
+            out, attn_weights = self.encoder(x, return_attention_weights=return_attention_weights)
+            out = self.last_lin(out)
+            return out, attn_weights
+        
+        out = self.encoder(x)
+        out = self.last_lin(out)
+        return out

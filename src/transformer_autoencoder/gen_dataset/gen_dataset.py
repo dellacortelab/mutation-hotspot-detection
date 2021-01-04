@@ -47,6 +47,9 @@ class SeqDatasetGenerator(DatasetGenerator):
         self.train_val_test_split = train_val_test_split
         self.no_verification = no_verification
 
+        if not os.path.exists(self.dataset_dir):
+            os.makedirs(self.dataset_dir)
+
     def prepare_dataset(self):
         """Download, unzip, and preprocess sequences, collecting aggregate statistics about the 
         dataset along the way"""

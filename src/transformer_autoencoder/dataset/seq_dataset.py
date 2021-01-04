@@ -21,13 +21,15 @@ class ManyToOneDataset(IterableDataset):
         mode='train',
         vocab_size=8000,
         crop_length=None,
+        return_raw_seq=False,
         no_verification=False,
         dataset_generator_class=None,
         n_seq=None
         ):
         super().__init__()
 
-        self.crop_length=crop_length
+        self.crop_length = crop_length
+        self.return_raw_seq = return_raw_seq
 
         if dataset_generator_class is not None:
             dataset_generator = dataset_generator_class(
@@ -130,7 +132,12 @@ class ManyToOneDataset(IterableDataset):
         seq_iter = map(self.preprocess_seq, seq_iter)
         label_iter = open(self.label_file, 'r')
         label_iter = map(self.preprocess_label, label_iter)
-        return zip(seq_iter, label_iter)
+
+        if self.return_orig_seq:
+            seq_iter_copy = open(self.seq_file, 'r')
+            return zip(seq_iter, label_iter, seq_iter_copy)
+        else:
+            return zip(seq_iter, label_iter)
 
     def __len__(self):
         return self.n_seq

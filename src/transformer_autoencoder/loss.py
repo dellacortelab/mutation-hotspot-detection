@@ -6,15 +6,24 @@ from torch import nn
 
 
 class AutoEncoderLoss(nn.Module):
+    """Reconstruction loss for autoencoder, based on Cross Entropy"""
     def __init__(self, n_classes):
+        """Constructor for AutoEncoderLoss
+        Args:
+            n_classes (int): the number of classes in the input/output
+        """
         super().__init__()
 
         self.objective = nn.CrossEntropyLoss()
         self.n_classes = n_classes
 
     def forward(self, y_pred, y_truth):
+        """Get the loss of the prediction compared to the truth
+        Args:
+            y_pred ((N x self.n_classes) torch.Tensor): the predicted logits
+            y_truth ((N) (torch.long) torch.Tensor): the true classes (integer indices)
+        """
         return self.objective(y_pred.view(-1, self.n_classes), y_truth.view(-1))
-
 
 class AutoEncoderFineTuneLoss(nn.Module):
     def __init__(self, n_classes, reconstruction_weight=1., fine_tune_weight=1.):
