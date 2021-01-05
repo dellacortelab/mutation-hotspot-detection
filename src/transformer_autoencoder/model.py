@@ -43,7 +43,6 @@ class AttentionLayer(nn.Module):
         # # q: N x 1 x d_model
         # k = self.lin_k(x)
         # k = torch.transpose(k, 1, 2)
-        
         # x: N x L x d_model
         k = self.lin_k(x)
         # k: N x L x d_model
@@ -62,7 +61,7 @@ class AttentionLayer(nn.Module):
         # out: N x d_model
 
         if return_attention_weights:
-            return out, attn
+            return out, attn.squeeze(1)
         
         return out
 
@@ -84,14 +83,22 @@ class ManyToOneAttentionBlock(nn.Module):
                 with the network output
         """
         if return_attention_weights:
+            # x: N x L x d_model
             out, attn_weights = self.attn(x, return_attention_weights=return_attention_weights)
+            # out: N x 1 x d_model
             out = self.dropout(out)
-            out = self.layer_norm(x + out)
+            # out: N x 1 x d_model
+            # out = self.layer_norm(out)
+            # Experimenting with skip connection
+            out = self.layer_norm(torch.mean(x, dim=1) + out)
+            # out: N x 1 x d_model
             return out, attn_weights
 
         out = self.attn(x)
         out = self.dropout(out)
-        out = self.layer_norm(x + out)
+        # out = self.layer_norm(out)
+        # Experimenting with skip connection
+        out = self.layer_norm(torch.mean(x, dim=1) + out)
         return out
 
 
@@ -118,35 +125,12 @@ class TransformerEncoder(nn.Module):
         # out: N x L x d_model
 
         if return_attention_weights:
-            out, attn_weights = self.attn(x, return_attention_weights=return_attention_weights)
+            out, attn_weights = self.attn(out, return_attention_weights=return_attention_weights)
             # out: N x 1 x d_model
             return out, attn_weights
 
         out = self.attn(out)
         # out: N x 1 x d_model
-        return out
-
-
-class LastLinearBlock(nn.Module):
-    """Linear layer with dropout skip connection (no non-linearity because softmax happens in the loss)
-    """
-    def __init__(self, d_model=768):
-        super().__init__()
-
-        config = BertConfig(vocab_size=vocab_size, hidden_size=d_model)
-        self.lin = nn.Linear(d_model, d_model)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.layer_norm = nn.LayerNorm(d_model, eps=config.layer_norm_eps)
-
-    def forward(self, x):
-        """Pass x through the linear layer
-        Args:
-            x ((N x d_model) torch.Tensor): the embedding from the TransformerEncoder
-        """
-        # Last Linear Block
-        out = self.lin(x)
-        out = self.dropout(out)
-        out = self.layer_norm(x + out)
         return out
 
 
@@ -374,7 +358,7 @@ class TransformerActivityPredictor(nn.Module):
                 print("Pretrained was set to True, but no pretrained activity network was found. \
                     Training activity predictor from scratch.")
         else:
-            self.last_lin = LastLinearBlock(d_model=d_model)
+            self.last_lin = nn.Linear(d_model, pred_dim)
 
     def encode(self, x):
         return self.encoder(x)

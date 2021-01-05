@@ -13,8 +13,8 @@ from .dataset.seq_dataset import ShuffleDataset, padding_collate_fn
 # 4. For example, 60e9 * 1/4 = 500 * 1 * n_seq -> n_seq = 30000000 (30 million sequences)
 # 5. Let buffer_size=n_seq
 
-def get_sequence_loaders(dataset_class=ProtSeqDataset, batch_size=32, vocab_size=8000, n_seq=None, dataset_dir='/data/uniparc', buffer_size=int(3e7), distributed=True, no_verification=False):
-    train_dataset = dataset_class(mode='train', vocab_size=vocab_size, no_verification=no_verification, dataset_dir=dataset_dir, n_seq=n_seq)
+def get_sequence_loaders(dataset_class=ProtSeqDataset, batch_size=32, vocab_size=8000, n_seq=None, dataset_dir='/data/uniparc', buffer_size=int(3e7), distributed=True, simple_data=True, no_verification=False):
+    train_dataset = dataset_class(mode='train', vocab_size=vocab_size, simple_data=simple_data, no_verification=no_verification, dataset_dir=dataset_dir, n_seq=n_seq)
     val_dataset = dataset_class(mode='val', vocab_size=vocab_size, dataset_dir=dataset_dir)
     test_dataset = dataset_class(mode='test', vocab_size=vocab_size, dataset_dir=dataset_dir)
     # Create "Shuffle Datasets", which which allow for random sampling to the greatest possible extent

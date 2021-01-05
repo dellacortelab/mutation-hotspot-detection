@@ -21,7 +21,7 @@ from torch.nn import MSELoss
 # - * = high priority
 #
 # - Dataset
-# - *No stochasticity in assignment of score. Only hotspot residues contribute to score (and thus the loss), not all residues
+# - ^No stochasticity in assignment of score. Only hotspot residues contribute to score (and thus the loss), not all residues
 # - *Only train one mutation
 # - - Mutation at one position - Hydrophilics score 2, hydrophobics score 0, other score 1
 # - *Train classification model - classify high, medium, or low activity based on number of beneficial mutations
@@ -29,8 +29,8 @@ from torch.nn import MSELoss
 # - Reduce vocabulary to binary
 # - 
 # - Training/model
-# - Add learning rate hyperparameter
-# - Train for longer
+# - *Add learning rate hyperparameter
+# - ^Train for longer
 # - Substitute attention for Bert pooling
 # - ^Implement correct version of attention
 # - ^Figure out optimal score vs average score
@@ -41,12 +41,12 @@ from torch.nn import MSELoss
 # - 
 # - Evaluation
 # - ^Get means and variances only for mutated amino acid, not for original
-# - - *Highlight beneficial bars in green, detrimental in red, and flexible in blue
-# - - *Visualize difference only at hotspot residues
+# - - ^Highlight beneficial bars in green, detrimental in red, and flexible in blue
+# - - ^Visualize difference only at hotspot residues
+# - ^Visualize attention in pooling layer
+# - *Visualize distance matrix between embeddings (hopefully hydrophobic will be close to hydrophobic, etc.)
 # - Visualize difference between prediction for mutation vs. original
 # - Compare predictions for mutations present in the dataset to predictions for mutations not in the dataset
-# - *Visualize attention in pooling layer
-# - *Visualize distance matrix between embeddings (hopefully hydrophobic will be close to hydrophobic, etc.)
 ##########################
 
 
@@ -55,7 +55,7 @@ def hotspot_experiment(
         model_name='transformer_activity_predictor',
         dataset_dir='/data/mutation_activity/dataset',
         log_dir='/data/mutation_activity/logs',
-        n_epochs=4,
+        n_epochs=10,
         batch_eval_freq=100,
         epoch_eval_freq=1,
         no_verification=True,
@@ -64,15 +64,17 @@ def hotspot_experiment(
         d_model=768,
         batch_size=32,
         n_seq=int(1e4),
-        dataset_simplicity="simple_0",
-        debug=True
-        # debug=False
+        simple_data=False,
+        # debug=True
+        debug=False
     ):
     if debug:
-        n_seq=int(1e2)
-        log_dir='/data/mutation_activity/logs_mini'
-        dataset_dir='/data/mutation_activity/dataset_mini'
-
+        simple_data = True
+        n_seq = int(1e2)
+        log_dir = '/data/mutation_activity/logs_mini'
+        dataset_dir = '/data/mutation_activity/dataset_mini'
+        n_epochs = 1
+    # Check for adequate randomization - val_loader vs iterating through the dataset
 
     # Dataset
     # 100k amino acid sequences of length 100k amino acid sequences of length 200
@@ -97,9 +99,9 @@ def hotspot_experiment(
     # Cuda seed?
 
     # Load data into dataloaders
-    train_loader, val_loader, test_loader = get_sequence_loaders(dataset_class=MutationActivityDataset, dataset_dir=dataset_dir, batch_size=batch_size, no_verification=no_verification, vocab_size=vocab_size, n_seq=n_seq)
-    device = torch.device('cpu') 
-    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    train_loader, val_loader, test_loader = get_sequence_loaders(dataset_class=MutationActivityDataset, dataset_dir=dataset_dir, batch_size=batch_size, simple_data=simple_data, no_verification=no_verification, vocab_size=vocab_size, n_seq=n_seq)
+    # device = torch.device('cpu') 
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Setting objective")
     objective = MSELoss()
     print("Building model")

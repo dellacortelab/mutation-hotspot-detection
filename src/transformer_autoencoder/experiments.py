@@ -141,7 +141,7 @@ def plot_hotspots(pred_good, pred_bad, pred_flexible, dataset_dir, log_dir):
         log_dir (str): the directory in which to save the results
         dataset_dir (str): the directory in which the dataset is stored
     """
-    fig, ax = plt.subplots(1,1,figsize=(20,5))
+    fig, ax = plt.subplots(1,1,figsize=(30,5))
 
     # Get true indices
     true_indices = np.load(os.path.join(dataset_dir, 'good_bad_flex_indices.npz'))
@@ -190,15 +190,15 @@ def plot_mean_var(scores, colors, log_dir):
         colors (list of str): colors representing the type of each residue
         log_dir (str): the directory in which to save the results
     """
-    fig = plt.figure(figsize=(20, 10))
+    fig = plt.figure(figsize=(30, 10))
     means, variances = get_mean_var_for_mutations(scores)
     plt.subplot(211)
-    plt.bar(np.arange(len(means)), means, colors=colors, edgecolor='black')
+    plt.bar(np.arange(len(means)), means, color=colors, edgecolor='black')
     plt.title("Mean score per residue mutation")
     plt.ylabel('Mean Activity Score')
     plt.xlabel('Residue Position')
     plt.subplot(212)
-    plt.bar(np.arange(len(variances)), variances, colors=colors, edgecolor='black')
+    plt.bar(np.arange(len(variances)), variances, color=colors, edgecolor='black')
     plt.title("Variance Across Amino Acids for each Residue")
     plt.ylabel('Variance of Activity Score')
     plt.xlabel('Residue Position')
@@ -223,14 +223,20 @@ def get_average_attention(
     Returns:
         attention_weights_average ((seq_length) np.ndarray): the average attention weights for each residue
     """
-    dataset = MutationActivityDataset(mode='train', no_verification=True, dataset_dir=dataset_dir, n_seq=n_seq)
+    dataset = MutationActivityDataset(mode='train', no_verification=True, dataset_dir=dataset_dir)
     model.to(device)
     
-    attention_weights_sum = np.zeros(len(base_seq))
-    for x, _ in dataset:
+    attention_weights_sum = None
+    for i, (x, _) in enumerate(dataset):
+        if i > n_seq:
+            break
+
+        if attention_weights_sum is None:
+            attention_weights_sum = np.zeros(len(x[1:-1]))
+
         x = x.to(device).unsqueeze(0)
-        attention_weights = model.compute_attention(x)
-        attention_weights_sum += attention_weights.detach().cpu().numpy()
+        _, attention_weights = model(x, return_attention_weights=True)
+        attention_weights_sum += attention_weights.squeeze(0).detach().cpu().numpy()[1:-1]
 
     attention_weights_average = attention_weights_sum / n_seq
 
@@ -243,8 +249,8 @@ def plot_average_attention(attention, colors, log_dir):
         colors (list of str): colors representing the type of each residue
         log_dir (str): the directory in which to save the results
     """
-    fig = plt.figure(figsize=(20, 5))
-    plt.bar(np.arange(len(attention)), attention, colors=colors, edgecolor='black')
+    fig = plt.figure(figsize=(30, 5))
+    plt.bar(np.arange(len(attention)), attention, color=colors, edgecolor='black')
     plt.title("Attention Values per Residue")
     plt.ylabel('Attention Score')
     plt.xlabel('Residue Position')
@@ -272,18 +278,21 @@ def get_attention_samples(
         mut_indices_list (list of (seq_length) np.ndarray's): a list of ndarrays with 1's where each sequence is mutated
         attention_weights_list (list of (seq_length) np.ndarray's): the attention weights for each sample
     """
-    dataset = MutationActivityDataset(mode='train', return_raw_seq=True, no_verification=True, dataset_dir=dataset_dir, n_seq=n_samples)
+    dataset = MutationActivityDataset(mode='train', return_raw_seq=True, no_verification=True, dataset_dir=dataset_dir)
     model.to(device)
 
     sequences = []
     attention_weights_list = []
     mut_indices_list = []
-    for x, _, raw_seq in dataset:
-        
+    for i, (x, _, raw_seq) in enumerate(dataset):
+        if i > n_samples:
+            break
+
         # Get indices where this sequence differs from the original sequence
         mut_indices = ( np.array(list(raw_seq)) != base_seq )
         x = x.to(device).unsqueeze(0)
-        attention_weights = model.compute_attention(x).detach().cpu().numpy()
+        _, attention_weights = model(x, return_attention_weights=True)
+        attention_weights = attention_weights.squeeze(0).detach().cpu().numpy()[1:-1]
         
         sequences.append(raw_seq)
         mut_indices_list.append(mut_indices)
@@ -291,31 +300,36 @@ def get_attention_samples(
 
     return sequences, mut_indices_list, attention_weights_list
 
-def plot_attention_samples(attention_samples, sequences, colors, log_dir):
+def plot_attention_samples(sequences, mut_indices_list, attention_samples, colors, log_dir):
     """Plot the attention weights of the last attention layer for each residue.
     Args:
-        attention ((seq_length) np.ndarray): the attention weights for each residue
+        sequences (list of (seq_length) np.ndarrays): the sequences sampled
+        attention (list of (seq_length) np.ndarrays): the attention weights for each residue
         colors (list of str): colors representing the type of each residue
-        sequences (list of (seq_length) np.ndarray): the sequences sampled
         log_dir (str): the directory in which to save the results
     """
     n_samples = len(attention_samples)
 
-    fig, ax = plt.subplots(5, 1, figsize=(20, 5*n_samples))
+    fig, ax = plt.subplots(n_samples, 1, figsize=(30, 5*n_samples))
 
-    for i, (seq, mut_indices, attention) in enumerate(zip(sequences, mut_indices, attention)):
-
-        ax[i].bar(np.arange(n_samples), attention, colors=colors, edgecolor='black')
+    plt.suptitle("Attention Values per Residue")
+    for i, (seq, mut_indices, attention) in enumerate(zip(sequences, mut_indices_list, attention_samples)):
         
+        ax[i].bar(np.arange(len(attention)), attention, color=colors, edgecolor='black')
+
+        # Set ticks
+        # Use the pyplot interface to change just one subplot...
+        plt.sca(ax[i])
+        plt.xticks(np.arange(len(attention)), list(seq))
         ticklabels = ax[i].get_xticklabels()
         for j, idx_mutated in enumerate(mut_indices):
             if idx_mutated:
                 ticklabels[j].set_color("red")
-
-        plt.title("Attention Values per Residue")
-        plt.ylabel('Attention Score')
-        plt.xlabel('Residue Position (ticks for mutated residues in red)')
-        plt.savefig(os.path.join(log_dir, 'attention_samples.png'))
+        
+        ax[i].set_ylabel('Attention Score')
+        ax[i].set_xlabel('Residue Position (ticks for mutated residues in red)')
+    
+    plt.savefig(os.path.join(log_dir, 'attention_samples.png'))
 
 
 def get_summary_plots(model, device, log_dir, dataset_dir):
@@ -327,19 +341,19 @@ def get_summary_plots(model, device, log_dir, dataset_dir):
         dataset_dir (str): the directory in which the dataset is stored
     """
     # Score all residue substitutions
-    # scores = get_predictions(model=model, device=device, dataset_dir=dataset_dir)
+    scores = get_predictions(model=model, device=device, dataset_dir=dataset_dir)
     colors = get_colors(dataset_dir=dataset_dir)
 
     # Plot 0: average attention weights
     average_attention = get_average_attention(model=model, device=device, dataset_dir=dataset_dir)
-    plot_attention(attention=average_attention, colors=colors, log_dir=log_dir)
+    plot_average_attention(attention=average_attention, colors=colors, log_dir=log_dir)
 
     # Plot 0.5: attention weights for a couple of individual sequences
-    sequences, attention_samples = get_attention_samples(model=model, device=device, dataset_dir=dataset_dir)
-    plot_attention_samples(sequences=sequences, attention_samples=attention_samples, log_dir=log_dir)
+    sequences, mut_indices_list, attention_samples = get_attention_samples(model=model, device=device, dataset_dir=dataset_dir)
+    plot_attention_samples(sequences=sequences, mut_indices_list=mut_indices_list, attention_samples=attention_samples, colors=colors, log_dir=log_dir)
 
     # Plot 1: means and variances
-    plot_mean_var(scores=scores, log_dir=log_dir)
+    plot_mean_var(scores=scores, colors=colors, log_dir=log_dir)
 
     # Plot 2: Predicted beneficial/detrimental/flexible indices vs. reality
     pred_good, pred_bad, pred_flexible = predict_activity(scores=scores)

@@ -8,6 +8,7 @@ import numpy as np
 import sentencepiece as spm
 import torch
 import ast
+import string
 
 from ..logger import Logger
 
@@ -24,6 +25,7 @@ class ManyToOneDataset(IterableDataset):
         return_raw_seq=False,
         no_verification=False,
         dataset_generator_class=None,
+        simple_data=False,
         n_seq=None
         ):
         super().__init__()
@@ -39,7 +41,8 @@ class ManyToOneDataset(IterableDataset):
                 tokenizer_prefix=tokenizer_prefix,
                 vocab_size=vocab_size,
                 no_verification=no_verification,
-                n_seq=n_seq
+                n_seq=n_seq,
+                simple_data=simple_data
             )
             dataset_generator.prepare_dataset()
 
@@ -133,8 +136,9 @@ class ManyToOneDataset(IterableDataset):
         label_iter = open(self.label_file, 'r')
         label_iter = map(self.preprocess_label, label_iter)
 
-        if self.return_orig_seq:
+        if self.return_raw_seq:
             seq_iter_copy = open(self.seq_file, 'r')
+            seq_iter_copy = map(str.rstrip, seq_iter_copy)
             return zip(seq_iter, label_iter, seq_iter_copy)
         else:
             return zip(seq_iter, label_iter)

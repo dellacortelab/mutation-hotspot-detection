@@ -31,6 +31,7 @@ class SeqDatasetGenerator(DatasetGenerator):
         input_sentence_size=int(1e9),
         shuffle_input_sentence=True,
         train_val_test_split=[.8, .1, .1],
+        simple_data=False,
         no_verification=False
         ):
         super().__init__()
@@ -45,12 +46,13 @@ class SeqDatasetGenerator(DatasetGenerator):
         self.input_sentence_size = input_sentence_size
         self.shuffle_input_sentence = shuffle_input_sentence
         self.train_val_test_split = train_val_test_split
+        self.simple_data = simple_data
         self.no_verification = no_verification
 
         if not os.path.exists(self.dataset_dir):
             os.makedirs(self.dataset_dir)
 
-    def prepare_dataset(self):
+    def prepare_dataset(self, *args, **kwargs):
         """Download, unzip, and preprocess sequences, collecting aggregate statistics about the 
         dataset along the way"""
 
@@ -67,7 +69,7 @@ class SeqDatasetGenerator(DatasetGenerator):
                     raise ValueError("Sequence file doesn't exist")
             else:
                 print("About to create sequence file. This could take several hours.")
-            self.prepare_sequences_file()
+            self.prepare_sequences_file(*args, **kwargs)
 
         if not os.path.exists(self.train_seq_file):
             if not self.no_verification:

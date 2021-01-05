@@ -58,6 +58,8 @@ class MutationDatasetGenerator(SeqDatasetGenerator):
         """Assign a number representing the enzyme activity of the sequence, based on whether mutations
         occur at beneficial locations, detrimental locations, flexible locations, or neutral locations.
         """
+        # For O(1) lookup
+        beneficial_indices, detrimental_indices, flexible_indices = set(beneficial_indices), set(detrimental_indices), set(flexible_indices)
         # At flexible sites, polar hydrophilic are beneficial, hydrophobic are detrimental
         hydrophobics = 'AILMFCV'
         hydrophilics = 'RNDQEHK'
@@ -65,23 +67,39 @@ class MutationDatasetGenerator(SeqDatasetGenerator):
         # Start with a baseline positive activity
         activity = 1.
         for mut_site, mut_value in zip(mut_sites, mut_values):
-            if mut_value in beneficial_indices:
-                activity += np.random.uniform(low = 0.3, high = 0.6)
-            elif mut_value in detrimental_indices:
-                activity += np.random.uniform(low = -0.6, high = -0.3)    
+            # import pdb; pdb.set_trace()
+            if mut_site in beneficial_indices:
+                if self.simple_data:
+                    activity += .6
+                else:
+                    activity += np.random.uniform(low = 0.3, high = 0.6)
+            elif mut_site in detrimental_indices:
+                if self.simple_data:
+                    activity += -.6
+                else:
+                    activity += np.random.uniform(low = -0.6, high = -0.3)    
             # The way we handl flexible indices isn't great - we only
             # give a hydrophilic/hydrophobic bonus/penalty if it is a 
             # mutated residue, not for all flexible residues. A better 
             # way to do this would be to assign a value for all flexible
             # residues. We could expect better embeddings in this case,
-            # and potentially make a cool distance matrix for the embeddings
-            elif mut_value in flexible_indices:
+            # and make a cool distance matrix for the embeddings
+            elif mut_site in flexible_indices:
                 if mut_value in hydrophilics:
-                    activity += np.random.uniform(low = 0.3, high = 0.6)
+                    if self.simple_data:
+                        activity += .6
+                    else:
+                        activity += np.random.uniform(low = 0.3, high = 0.6)
                 elif mut_value in hydrophobics:
-                    activity += np.random.uniform(low = -0.6, high = -0.3)
+                    if self.simple_data:
+                        activity += -.6
+                    else:
+                        activity += np.random.uniform(low = -0.6, high = -0.3)
                 else:
-                    activity += np.random.uniform(low = -0.3, high = 0.3)
+                    if self.simple_data:
+                        pass
+                    else:
+                        activity += np.random.uniform(low = -0.3, high = 0.3)
 
         # # Assign mutation impacts
         # impact = np.random.uniform(low = -0.1, high = 0.1, size = 200) #most have no impact 
@@ -108,7 +126,6 @@ class MutationDatasetGenerator(SeqDatasetGenerator):
         amino_acids=np.array(list("ACDEFGHIKLMNPQRSTVWY"))
     ):
         beneficial_indices, detrimental_indices, flexible_indices = self.define_hotspots()
-
         # Log metadata for train/val/test split
         self.log_sequence_data(np.ones(self.n_seq)*self.seq_length)
 
