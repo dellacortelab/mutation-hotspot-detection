@@ -5,7 +5,7 @@ RUN yum makecache -y && \
      yum makecache -y && \
      yum install -y conda sudo python36-pip
 
-RUN pip3 install --upgrade pip && pip3 install
+RUN pip3 install --upgrade pip && pip3 install \
         ipython \
         matplotlib \
         numpy \
