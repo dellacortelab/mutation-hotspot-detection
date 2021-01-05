@@ -15,3 +15,5 @@ RUN pip3 install --upgrade pip && pip3 install \
 	    sentencepiece \
         torch \
         transformers
+
+CMD ["/bin/bash"]

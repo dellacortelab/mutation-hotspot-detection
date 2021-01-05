@@ -26,7 +26,8 @@ class ManyToOneDataset(IterableDataset):
         no_verification=False,
         dataset_generator_class=None,
         simple_data=False,
-        n_seq=None
+        n_seq=None,
+        **kwargs
         ):
         super().__init__()
 
@@ -42,7 +43,8 @@ class ManyToOneDataset(IterableDataset):
                 vocab_size=vocab_size,
                 no_verification=no_verification,
                 n_seq=n_seq,
-                simple_data=simple_data
+                simple_data=simple_data,
+                **kwargs
             )
             dataset_generator.prepare_dataset()
 

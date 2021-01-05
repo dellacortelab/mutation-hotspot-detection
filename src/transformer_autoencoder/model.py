@@ -334,6 +334,38 @@ class TransformerAutoEncoder(nn.Module):
             
         return ''.join(out_list)
 
+class FullyConnectedActivityPredictor(nn.Module):
+    """An architecture more suited to finding patterns based on positions in a fixed-length vector
+    """
+    def __init__(self, d_model=768, vocab_size=8000, seq_length=200):
+        super().__init__()
+
+        self.embedding = nn.Embedding(num_embeddings=vocab_size, embedding_dim=d_model)
+        self.lin_1 = nn.Linear(d_model, 1)
+        # self.act = nn.ReLU()
+        # self.act = nn.Sigmoid()
+        self.act = nn.Tanh()
+        self.lin_2 = nn.Linear(seq_length, 1)
+
+    def forward(self, x, return_attention_weights=False):
+        """Run a forward pass that outputs predicted activity and 
+        reconstructed input.
+        Args:
+            x ((N x L) torch.Tensor): an item from the training set
+            return_attention_weights (bool): whether to return the tensor weights
+                with the network output
+        """
+        # import pdb; pdb.set_trace()
+        out = self.embedding(x)
+        out = self.lin_1(out).squeeze(-1)
+        out = self.act(out)
+        out = self.lin_2(out)
+
+        if return_attention_weights:
+            return out, self.lin_2.weight.squeeze(-1)
+
+        return out
+
 
 class TransformerActivityPredictor(nn.Module):
     def __init__(self, d_model=768, vocab_size=8000, pred_dim=1, from_pretrained=False, model_name='model', base_savepath='/models/hydrolase_design/transformer_activity_predictor'):

@@ -7,7 +7,7 @@ git clone https://gitlab.com/dellacortelab/hydrolase-design.git
 ```
 cd hydrolase-design && docker build -t hydrolase-design -f docker/Dockerfile .
 ```
-3. Run an interactive docker container (replacing `/path/to/data` and `/path/to/logs` with the correct paths)
+3. Run an interactive docker container (replacing `/path/to/data` and `/path/to/logs` with the desired local paths)
 ```
 docker run -it --rm --name myname-hydrolase -v $(pwd):/code -v /path/to/data:/data -v /path/to/logs:/logs hydrolase-design
 ```

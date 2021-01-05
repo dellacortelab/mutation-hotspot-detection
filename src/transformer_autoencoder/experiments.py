@@ -76,7 +76,7 @@ def get_mean_var_for_mutations(
     return np.mean(abbreviated_scores, axis=1), np.var(abbreviated_scores, axis=1)
 
 
-def predict_activity(scores, n_beneficial=10, n_detrimental=10, n_flexible=30):
+def predict_activity(scores, means, variances, n_beneficial=10, n_detrimental=10, n_flexible=30):
     """Return the predicted beneficial residues, detrimental residues, and flexible residues
     Args:
         scores ((seq_length x n_amino_acids) np.ndarray): the predicted scores with each mutation
@@ -90,7 +90,6 @@ def predict_activity(scores, n_beneficial=10, n_detrimental=10, n_flexible=30):
         predicted_flexible ((seq_length) np.ndarray): the predicted flexible indices
     """
     # Predict beneficial locations by top and bottom means
-    means, variances = get_mean_var_for_mutations(scores)
     # Sorted means, lowest to highest
     sorted_means = np.argsort(means)
     predicted_beneficial = sorted_means[-n_beneficial:]
@@ -132,7 +131,7 @@ def get_colors(
 
     return colors
 
-def plot_hotspots(pred_good, pred_bad, pred_flexible, dataset_dir, log_dir):
+def plot_hotspots(base_seq, pred_good, pred_bad, pred_flexible, dataset_dir, log_dir):
     """Plot predicted hotspots on top and true hotspots on bottom
     Args:
         predicted_beneficial ((seq_length) np.ndarray): the predicted beneficial indices
@@ -149,7 +148,7 @@ def plot_hotspots(pred_good, pred_bad, pred_flexible, dataset_dir, log_dir):
     true_bad = true_indices['detrimental']
     true_flexible = true_indices['flexible']
 
-    for i in range(200):
+    for i in range(len(base_seq)):
         if i in true_good:
             color = 'green'
         elif i in true_bad:
@@ -170,19 +169,19 @@ def plot_hotspots(pred_good, pred_bad, pred_flexible, dataset_dir, log_dir):
             color = 'white'
         b = box((i,1),1,1,color = color)
         ax.add_patch(b)
-    plt.plot([0,200],[1,1],color='black')
+    plt.plot([0,len(base_seq)],[1,1],color='black')
     #ax.get_yaxis().set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
     ax.spines['left'].set_visible(False)
     plt.yticks([0.5, 1.5], ['Hidden Pattern', 'Predicted Pattern'], fontsize=16)
     plt.xticks(fontsize=22)
-    plt.xlim([0,200])
+    plt.xlim([0,len(base_seq)])
     plt.ylim([0,2])
 
     plt.savefig(os.path.join(log_dir, 'hotspots.png'))
 
-def plot_mean_var(scores, colors, log_dir):
+def plot_mean_var(scores, means, variances, colors, log_dir):
     """Plot the means and variances for each residue
     Args:
         scores ((seq_length x n_amino_acids) np.ndarray): the predicted scores with each mutation
@@ -191,7 +190,6 @@ def plot_mean_var(scores, colors, log_dir):
         log_dir (str): the directory in which to save the results
     """
     fig = plt.figure(figsize=(30, 10))
-    means, variances = get_mean_var_for_mutations(scores)
     plt.subplot(211)
     plt.bar(np.arange(len(means)), means, color=colors, edgecolor='black')
     plt.title("Mean score per residue mutation")
@@ -332,7 +330,7 @@ def plot_attention_samples(sequences, mut_indices_list, attention_samples, color
     plt.savefig(os.path.join(log_dir, 'attention_samples.png'))
 
 
-def get_summary_plots(model, device, log_dir, dataset_dir):
+def get_summary_plots(model, base_seq, amino_acids, device, log_dir, dataset_dir):
     """Save summary plots of mean score for each residue
     Args:
         model (nn.Module): a pytorch model
@@ -341,20 +339,21 @@ def get_summary_plots(model, device, log_dir, dataset_dir):
         dataset_dir (str): the directory in which the dataset is stored
     """
     # Score all residue substitutions
-    scores = get_predictions(model=model, device=device, dataset_dir=dataset_dir)
-    colors = get_colors(dataset_dir=dataset_dir)
+    scores = get_predictions(model=model, device=device, dataset_dir=dataset_dir, base_seq=base_seq, amino_acids=amino_acids)
+    colors = get_colors(base_seq=base_seq, dataset_dir=dataset_dir)
 
     # Plot 0: average attention weights
-    average_attention = get_average_attention(model=model, device=device, dataset_dir=dataset_dir)
+    average_attention = get_average_attention(model=model, device=device, dataset_dir=dataset_dir, base_seq=base_seq)
     plot_average_attention(attention=average_attention, colors=colors, log_dir=log_dir)
 
     # Plot 0.5: attention weights for a couple of individual sequences
-    sequences, mut_indices_list, attention_samples = get_attention_samples(model=model, device=device, dataset_dir=dataset_dir)
+    sequences, mut_indices_list, attention_samples = get_attention_samples(model=model, device=device, dataset_dir=dataset_dir, base_seq=base_seq)
     plot_attention_samples(sequences=sequences, mut_indices_list=mut_indices_list, attention_samples=attention_samples, colors=colors, log_dir=log_dir)
 
     # Plot 1: means and variances
-    plot_mean_var(scores=scores, colors=colors, log_dir=log_dir)
+    means, variances = get_mean_var_for_mutations(scores=scores, base_seq=base_seq, amino_acids=amino_acids)
+    plot_mean_var(scores=scores, means=means, variances=variances, colors=colors, log_dir=log_dir)
 
     # Plot 2: Predicted beneficial/detrimental/flexible indices vs. reality
-    pred_good, pred_bad, pred_flexible = predict_activity(scores=scores)
-    plot_hotspots(pred_good=pred_good, pred_bad=pred_bad, pred_flexible=pred_flexible, dataset_dir=dataset_dir, log_dir=log_dir)
+    pred_good, pred_bad, pred_flexible = predict_activity(scores=scores, means=means, variances=variances)
+    plot_hotspots(base_seq=base_seq, pred_good=pred_good, pred_bad=pred_bad, pred_flexible=pred_flexible, dataset_dir=dataset_dir, log_dir=log_dir)

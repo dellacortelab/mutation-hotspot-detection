@@ -4,10 +4,11 @@
 
 from transformer_autoencoder.dataset.mutation_activity_dataset import MutationActivityDataset
 from transformer_autoencoder.loader import get_sequence_loaders
-from transformer_autoencoder.model import TransformerActivityPredictor
+from transformer_autoencoder.model import TransformerActivityPredictor, FullyConnectedActivityPredictor
 from transformer_autoencoder.train import Trainer
 from transformer_autoencoder.experiments import get_summary_plots
 
+import numpy as np
 import torch
 from torch.nn import MSELoss
 
@@ -60,6 +61,8 @@ def hotspot_experiment(
         epoch_eval_freq=1,
         no_verification=True,
         # Hyperparameters
+        base_seq=np.array(list('MNFPRASRLMQAAVLGGLMAVSAAATAQTNPYARGPNPTAASLEASAGPFTVRSFTVSRPSGYGAGTVYYPTNAGGTVGAIAIVPGYTARQSSIKWWGPRLASHGFVVITIDTNSTLDQPSSRSSQQMAALRQVASLNGTSSSPIYGKVDTARMGVMGWSMGGGGSLISAANNPSLKAAAPQAPWDSSTNFSSVTVPTLI')),
+        amino_acids=np.array(list('ACDEFGHIKLMNPQRSTVWY')),
         vocab_size=24,
         d_model=768,
         batch_size=32,
@@ -74,6 +77,7 @@ def hotspot_experiment(
         log_dir = '/data/mutation_activity/logs_mini'
         dataset_dir = '/data/mutation_activity/dataset_mini'
         n_epochs = 1
+        base_seq = base_seq[:75]
     # Check for adequate randomization - val_loader vs iterating through the dataset
 
     # Dataset
@@ -99,22 +103,22 @@ def hotspot_experiment(
     # Cuda seed?
 
     # Load data into dataloaders
-    train_loader, val_loader, test_loader = get_sequence_loaders(dataset_class=MutationActivityDataset, dataset_dir=dataset_dir, batch_size=batch_size, simple_data=simple_data, no_verification=no_verification, vocab_size=vocab_size, n_seq=n_seq)
+    train_loader, val_loader, test_loader = get_sequence_loaders(dataset_class=MutationActivityDataset, dataset_dir=dataset_dir, batch_size=batch_size, simple_data=simple_data, no_verification=no_verification, vocab_size=vocab_size, n_seq=n_seq, base_seq=base_seq, amino_acids=amino_acids)
     # device = torch.device('cpu') 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Setting objective")
     objective = MSELoss()
     print("Building model")
     # Load network
-    # TODO: specify model path
-    model = TransformerActivityPredictor(vocab_size=vocab_size, d_model=d_model)
+    model = FullyConnectedActivityPredictor(vocab_size=vocab_size, d_model=d_model, seq_length=len(base_seq) + 2)
+    # model = TransformerActivityPredictor(vocab_size=vocab_size, d_model=d_model)
     print("Building trainer")
     trainer = Trainer(model=model, train_loader=train_loader, val_loader=val_loader, objective=objective, batch_size=batch_size, log_dir=log_dir, 
         base_savepath=base_savepath, model_name=model_name, device=device, batch_eval_freq=batch_eval_freq, epoch_eval_freq=epoch_eval_freq)
     print("Training model")
     trainer.train(n_epochs=n_epochs)
     print("Training complete") 
-    get_summary_plots(model=model, device=device, log_dir=log_dir, dataset_dir=dataset_dir)
+    get_summary_plots(model=model, base_seq=base_seq, amino_acids=amino_acids, device=device, log_dir=log_dir, dataset_dir=dataset_dir)
     # Results
     # Plot loss over time
     # Plot activity variance across residues
