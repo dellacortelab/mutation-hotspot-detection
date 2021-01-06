@@ -4,7 +4,7 @@
 
 from transformer_autoencoder.dataset.mutation_activity_dataset import MutationActivityDataset
 from transformer_autoencoder.loader import get_sequence_loaders
-from transformer_autoencoder.model import TransformerActivityPredictor, FullyConnectedActivityPredictor, NoTrainingActivityPredictor
+from transformer_autoencoder.model import TransformerActivityPredictor, FullyConnectedActivityPredictor
 from transformer_autoencoder.train import Trainer
 from transformer_autoencoder.experiments import get_summary_plots
 
@@ -66,7 +66,7 @@ def hotspot_experiment(
         model_name='transformer_activity_predictor',
         dataset_dir='/data/mutation_activity/dataset_short_seq',
         log_dir='/data/mutation_activity/logs_w_bias_untrained',
-        n_epochs=10,
+        n_epochs=20,
         batch_eval_freq=100,
         epoch_eval_freq=1,
         no_verification=True,
@@ -75,7 +75,7 @@ def hotspot_experiment(
         amino_acids=np.array(list('AILMFWYVCGPRNDQEHKST')),
         n_mutations=30,
         vocab_size=24,
-        d_model=2,
+        d_model=100,
         batch_size=32,
         n_seq=int(1e5),
         simple_data=True,
@@ -115,7 +115,7 @@ def hotspot_experiment(
     np.random.seed(0)
     torch.manual_seed(0)
     # Cuda seed?
-
+    torch.autograd.set_detect_anomaly(True)
     # Load data into dataloaders
     train_loader, val_loader, test_loader = get_sequence_loaders(dataset_class=MutationActivityDataset, dataset_dir=dataset_dir, batch_size=batch_size, simple_data=simple_data, no_verification=no_verification, vocab_size=vocab_size, n_mutations=n_mutations, n_seq=n_seq, base_seq=base_seq, amino_acids=amino_acids)
     # device = torch.device('cpu') 
@@ -124,8 +124,8 @@ def hotspot_experiment(
     objective = MSELoss()
     print("Building model")
     # Load network
-    model = NoTrainingActivityPredictor(vocab_size=vocab_size, d_model=d_model, seq_length=len(base_seq) + 2, amino_acids=amino_acids, base_seq=base_seq, dataset_dir=dataset_dir)
-    # model = FullyConnectedActivityPredictor(vocab_size=vocab_size, d_model=d_model, seq_length=len(base_seq) + 2)
+    # model = NoTrainingActivityPredictor(vocab_size=vocab_size, d_model=d_model, seq_length=len(base_seq) + 2, amino_acids=amino_acids, base_seq=base_seq, dataset_dir=dataset_dir)
+    model = FullyConnectedActivityPredictor(vocab_size=vocab_size, d_model=d_model, seq_length=len(base_seq) + 2, amino_acids=amino_acids, base_seq=base_seq, dataset_dir=dataset_dir)
     # model = TransformerActivityPredictor(vocab_size=vocab_size, d_model=d_model)
     # print("Building trainer")
     # trainer = Trainer(model=model, train_loader=train_loader, val_loader=val_loader, objective=objective, batch_size=batch_size, log_dir=log_dir, 

@@ -337,19 +337,20 @@ class TransformerAutoEncoder(nn.Module):
             
         return ''.join(out_list)
 
-class FullyConnectedActivityPredictor(nn.Module):
+class FullyConnectedActivityPredictor1(nn.Module):
     """An architecture more suited to finding patterns based on positions in a fixed-length vector
     """
     def __init__(self, d_model=768, vocab_size=8000, seq_length=200, from_pretrained=False, base_savepath='/models/hydrolase_design/fc_activity_predictor'):
         super().__init__()
 
         self.embedding = nn.Embedding(num_embeddings=vocab_size, embedding_dim=d_model)
+        self.lin_0 = nn.Linear(d_model, d_model)
         self.lin_1 = nn.Linear(d_model, 1)
         # self.act = nn.ReLU()
         # self.act = nn.Tanh()
         self.act = nn.Sigmoid()
         self.bias_layer = nn.Parameter(data=torch.ones(seq_length), requires_grad=True)
-        self.lin_2 = nn.Linear(seq_length, 1, bias=False)
+        self.lin_2 = nn.Linear(seq_length, 1)
 
         if from_pretrained:
             activity_predictor_path = os.path.join(base_savepath, 'fc_activity_predictor.pt')
@@ -369,9 +370,11 @@ class FullyConnectedActivityPredictor(nn.Module):
         """
         # Positivity(r) = -(flexible(r) and hydrophobic(r))
         out = self.embedding(x)
+        out = self.lin_0(out)
+        out = self.act(out)
         out = self.lin_1(out).squeeze(-1)
         out = self.act(out)
-        out += self.bias_layer
+        out = out.clone() + self.bias_layer
         out = self.lin_2(out)
 
         if return_attention_weights:
@@ -379,8 +382,7 @@ class FullyConnectedActivityPredictor(nn.Module):
 
         return out
 
-
-class NoTrainingActivityPredictor(nn.Module):
+class FullyConnectedActivityPredictor(nn.Module):
     """An architecture more suited to finding patterns based on positions in a fixed-length vector
     """
     def __init__(self, d_model=768, vocab_size=8000, seq_length=200, from_pretrained=False, base_savepath='/models/hydrolase_design/nt_activity_predictor', dataset_dir=None, amino_acids=np.array(list('AILMFWYVCGPRNDQEHKST')), base_seq=np.array(list('MNFPRASRLMQAAVLGGLMAVSAAATAQTNPYARGPNPTAASLEASAGPFTVRSFTVSRPSGYGAGTVYYPTNAGGTVGAIAIVPGYTARQSSIKWWGPRLASHGFVVITIDTNSTLDQPSSRSSQQMAALRQVASLNGTSSSPIYGKVDTARMGVMGWSMGGGGSLISAANNPSLKAAAPQAPWDSSTNFSSVTVPTLI'))):
@@ -392,21 +394,23 @@ class NoTrainingActivityPredictor(nn.Module):
         self.weight_layer = nn.Parameter(data=torch.zeros(seq_length), requires_grad=True)
         self.bias_layer = nn.Parameter(data=torch.zeros(seq_length), requires_grad=True)
         
+        #
+        # Initialize weights
+        #
+
         # Create a dataset object to get the tokenized indices of the characters
         dataset = MutationActivityDataset(mode='train', no_verification=True, dataset_dir=dataset_dir)
         self.base_seq = nn.Parameter(data=dataset.tokenize(''.join(list(base_seq))), requires_grad=False)
         # Re-order such that the hydrophobics and hydrophilics are grouped together.
         # [1] because the tokenizer adds start/stop tokens
-        mylist = [dataset.tokenize(character)[1] for character in amino_acids[:11]]
-        mylist2 = [dataset.tokenize(character)[1] for character in amino_acids[11:]]
-        hydrophobic_tokenized_indices = torch.tensor(mylist)
-        hydrophilic_tokenized_indices = torch.tensor(mylist2)
+        hydrophobic_tokenized_indices = torch.tensor([dataset.tokenize(character)[1] for character in amino_acids[:11]])
+        hydrophilic_tokenized_indices = torch.tensor([dataset.tokenize(character)[1] for character in amino_acids[11:]])
         # Hydrophobics are positive, hydrophilics are negative
         with torch.no_grad():
-            self.embedding.weight[hydrophilic_tokenized_indices] = -torch.ones(9, 2)
-            self.embedding.weight[hydrophobic_tokenized_indices] = torch.ones(11, 2)
+            self.embedding.weight[hydrophilic_tokenized_indices] = -torch.ones(9, d_model)
+            self.embedding.weight[hydrophobic_tokenized_indices] = torch.ones(11, d_model)
 
-        self.lin_1.weight[:] = torch.ones(1, 2)*6
+        self.lin_1.weight[:] = torch.ones(1, d_model)*6
         
         true_indices = np.load(os.path.join(dataset_dir, 'good_bad_flex_indices.npz'))
         true_ids = np.zeros(seq_length)
@@ -444,36 +448,20 @@ class NoTrainingActivityPredictor(nn.Module):
             return_attention_weights (bool): whether to return the tensor weights
                 with the network output
         """
-        # embed hydrophilic residues in one part of the space
-        # embed hydrophobic residues in another part of the space
-        # embed othe residues in another part of the space
-        
-        # Input (L x d_model)
-        # In layer 1, (d_model x 1) transform hydrophilics to negative and hydrophobics to positive
-        # In activation 1a, map negatives to 0 and positives to 1
-        # out_1 dim: (L)
-        # Now, each position is 0 if hydrophilic, 1 if hydrophobic
-        # In layer 2, (pointwise mul L x 1): multiply out_1 by 0 if non-flexible, 1 if flexible
-        # Now, each position is 1 if hydrophobic and flexible, 0 otherwise
-        # Add bias of -.5
-        # Now, each position is .5 if hydrophobic and flexible, -.5 if beneficial, detrimental, or flexible and hydrophilic
-        # In layer 3, (GEMM L x 1): Multiply by -1.2 for flexible positions and beneficial positions, 1.2 for detrimental position, 0 for others, and sum 
-        # import pdb; pdb.set_trace()
         out = self.embedding(x)
-        out1 = self.lin_1(out).squeeze(-1)
-        out2 = self.act(out1)
-        out3 = out2 * self.weight_layer + self.bias_layer
-        # Final mask (cheating)
-        # import pdb; pdb.set_trace()
+        out = self.lin_1(out).squeeze(-1)
+        out = self.act(out)
+        out = out * self.weight_layer + self.bias_layer
+        # Mask out values that didn't change from the base_seq - we don't think these should contribute
         mask = self.base_seq == x
-        out3[mask] = 0
+        out[mask] = 0
 
-        out4 = torch.sum(out3, dim=-1)
+        out = torch.sum(out, dim=-1)
 
         if return_attention_weights:
-            return out4, self.weight_layer.data
+            return out, self.weight_layer.data
 
-        return out4
+        return out
 
 class TransformerActivityPredictor(nn.Module):
     def __init__(self, d_model=768, vocab_size=8000, pred_dim=1, from_pretrained=False, model_name='model', base_savepath='/models/hydrolase_design/transformer_activity_predictor'):
