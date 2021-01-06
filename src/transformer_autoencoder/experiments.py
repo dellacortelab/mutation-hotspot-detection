@@ -7,17 +7,20 @@ import copy
 from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle as box
 import numpy as np
-from .dataset.mutation_activity_dataset import MutationActivityDataset
+from scipy.spatial import distance_matrix
 import os
 
-def get_predictions(
+from .dataset.mutation_activity_dataset import MutationActivityDataset
+
+def get_marginal_scores(
         model, 
         device,
         dataset_dir,
         base_seq=np.array(list('MNFPRASRLMQAAVLGGLMAVSAAATAQTNPYARGPNPTAASLEASAGPFTVRSFTVSRPSGYGAGTVYYPTNAGGTVGAIAIVPGYTARQSSIKWWGPRLASHGFVVITIDTNSTLDQPSSRSSQQMAALRQVASLNGTSSSPIYGKVDTARMGVMGWSMGGGGSLISAANNPSLKAAAPQAPWDSSTNFSSVTVPTLI')),
         amino_acids="ACDEFGHIKLMNPQRSTVWY",
     ):
-    """Mutate every residue in the model to every other amino acid. Get the mean and
+    """Mutate every residue in the model to every other amino acid. Get the score above
+    or below the original score for each amino acid mutation in each residue. Get the mean and
     variance of the predictions for each residue position. We expect that flexible
     residues will have high variance across different amino acids (wrong - it should 
     predict 0 for all of them), beneficial mutations will have the highest predictions,
@@ -34,7 +37,7 @@ def get_predictions(
         predicted_flexible ((seq_length) np.ndarray): the predicted flexible indices
     """
     # Create a dataset object to preprocess the sequences
-    dataset = MutationActivityDataset(mode='train', no_verification=True, dataset_dir=dataset_dir, n_seq=100)
+    dataset = MutationActivityDataset(mode='train', no_verification=True, dataset_dir=dataset_dir)
 
     model.to(device)
 
@@ -45,7 +48,14 @@ def get_predictions(
             mut_sequence[i] = amino_acid
             mut_sequence = ''.join(mut_sequence)
             mut_seq_preproc = dataset.preprocess_seq(mut_sequence).to(device)
-            scores[i, j] = model(mut_seq_preproc.unsqueeze(0)).cpu().item()
+            score = model(mut_seq_preproc.unsqueeze(0)).cpu().item()
+            scores[i, j] = score
+            if base_seq[i] == amino_acid:
+                baseline_score = score
+            # import pdb; pdb.set_trace()
+        # We are interested in the marginal benefit of mutations, so we compare against the baseline
+        # non-mutated score.
+        scores[i, :] -= baseline_score
 
     return scores
 
@@ -329,6 +339,42 @@ def plot_attention_samples(sequences, mut_indices_list, attention_samples, color
     
     plt.savefig(os.path.join(log_dir, 'attention_samples.png'))
 
+def get_distance_matrix(model, amino_acids, dataset_dir):
+    """Get the distance matrix of the embedding layer of a model
+    Args:
+        model (nn.Module): the model
+        amino_acids ((n_amino_acids) np.ndarray): array of amino acid characters
+        dataset_dir (str): the directory in which the dataset is stored
+    Returns:
+        ((n_amino_acids x n_amino_acids) np.ndarray): the distance matrix
+    """
+    # Create a dataset object to get the tokenized indices of the characters
+    dataset = MutationActivityDataset(mode='train', no_verification=True, dataset_dir=dataset_dir, n_seq=100)
+    # Re-order such that the hydrophobics and hydrophilics are grouped together
+    tokenized_indices = [dataset.tokenize(character)[1] for character in amino_acids]
+
+    # Skip the start/end/unknown/padding tokens
+    embeddings = model.embedding.weight.detach().cpu().numpy()
+    embeddings = embeddings[tokenized_indices]
+    return distance_matrix(embeddings, embeddings)
+
+def plot_distance_matrix(distance_matrix, amino_acids, log_dir):
+    """Plot the distance matrix for the embeddings. We hope to see hydrophobics close to each other
+    and hydrophilics close to each other
+    Args:
+        distance_matrix ((n_amino_acids x n_amino_acids) np.ndarray): the distance matrix
+        amino_acids ((n_amino_acids) np.ndarray): array of amino acid characters
+        log_dir (str): the directory in which to save the results
+    """
+    fig = plt.figure()
+    plt.imshow(distance_matrix)
+    plt.xticks(np.arange(distance_matrix.shape[0]), amino_acids)
+    plt.yticks(np.arange(distance_matrix.shape[0]), amino_acids)
+    plt.title("Distance between embeddings")
+    plt.colorbar()
+    plt.gca().xaxis.tick_top()
+    plt.savefig(os.path.join(log_dir, 'distance_matrix.png'))
+
 
 def get_summary_plots(model, base_seq, amino_acids, device, log_dir, dataset_dir):
     """Save summary plots of mean score for each residue
@@ -338,8 +384,11 @@ def get_summary_plots(model, base_seq, amino_acids, device, log_dir, dataset_dir
         log_dir (str): the directory in which to save the results
         dataset_dir (str): the directory in which the dataset is stored
     """
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+
     # Score all residue substitutions
-    scores = get_predictions(model=model, device=device, dataset_dir=dataset_dir, base_seq=base_seq, amino_acids=amino_acids)
+    scores = get_marginal_scores(model=model, device=device, dataset_dir=dataset_dir, base_seq=base_seq, amino_acids=amino_acids)
     colors = get_colors(base_seq=base_seq, dataset_dir=dataset_dir)
 
     # Plot 0: average attention weights
@@ -357,3 +406,7 @@ def get_summary_plots(model, base_seq, amino_acids, device, log_dir, dataset_dir
     # Plot 2: Predicted beneficial/detrimental/flexible indices vs. reality
     pred_good, pred_bad, pred_flexible = predict_activity(scores=scores, means=means, variances=variances)
     plot_hotspots(base_seq=base_seq, pred_good=pred_good, pred_bad=pred_bad, pred_flexible=pred_flexible, dataset_dir=dataset_dir, log_dir=log_dir)
+
+    # Plot 3: Distances between embeddings
+    distance_matrix = get_distance_matrix(model, amino_acids, dataset_dir)
+    plot_distance_matrix(distance_matrix, amino_acids, log_dir)

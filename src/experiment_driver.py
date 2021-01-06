@@ -4,13 +4,21 @@
 
 from transformer_autoencoder.dataset.mutation_activity_dataset import MutationActivityDataset
 from transformer_autoencoder.loader import get_sequence_loaders
-from transformer_autoencoder.model import TransformerActivityPredictor, FullyConnectedActivityPredictor
+from transformer_autoencoder.model import TransformerActivityPredictor, FullyConnectedActivityPredictor, NoTrainingActivityPredictor
 from transformer_autoencoder.train import Trainer
 from transformer_autoencoder.experiments import get_summary_plots
 
 import numpy as np
 import torch
 from torch.nn import MSELoss
+
+# A different experiment
+# Take the sequence, and determine two essential subsequences
+# If the subsequences both are there, it scores 2
+# If one is gone, it scores 1
+# If the both are gone, it scores 0
+# Move this subsequence around in the true sequence
+
 
 ##########################
 # Observations: This task relies on position much more than amino acid identity and context. The power of 
@@ -36,6 +44,8 @@ from torch.nn import MSELoss
 # - ^Implement correct version of attention
 # - ^Figure out optimal score vs average score
 # - - Optimal score: Predict 2 for hydrophilics, 0 for hydrophobics, 1 for other
+# - - Optimal mean: 1 for most residues, 1.6 for beneficial, .4 for detrimental, a little under 1 for flexible
+# - - Optimal variance: 0 for most residues, 0 for beneficial, 0 for detrimental, ~.36 for flexible
 # - - Optimal loss: 0
 # - - Average score: 1
 # - - Average score loss: (0^2*6 + 1^2*7 + 1^2*7)/20 = .7
@@ -54,23 +64,27 @@ from torch.nn import MSELoss
 def hotspot_experiment(
         base_savepath='/models/hydrolase_design/transformer_activity_predictor',
         model_name='transformer_activity_predictor',
-        dataset_dir='/data/mutation_activity/dataset',
-        log_dir='/data/mutation_activity/logs',
+        dataset_dir='/data/mutation_activity/dataset_short_seq',
+        log_dir='/data/mutation_activity/logs_w_bias_untrained',
         n_epochs=10,
         batch_eval_freq=100,
         epoch_eval_freq=1,
         no_verification=True,
         # Hyperparameters
         base_seq=np.array(list('MNFPRASRLMQAAVLGGLMAVSAAATAQTNPYARGPNPTAASLEASAGPFTVRSFTVSRPSGYGAGTVYYPTNAGGTVGAIAIVPGYTARQSSIKWWGPRLASHGFVVITIDTNSTLDQPSSRSSQQMAALRQVASLNGTSSSPIYGKVDTARMGVMGWSMGGGGSLISAANNPSLKAAAPQAPWDSSTNFSSVTVPTLI')),
-        amino_acids=np.array(list('ACDEFGHIKLMNPQRSTVWY')),
+        amino_acids=np.array(list('AILMFWYVCGPRNDQEHKST')),
+        n_mutations=30,
         vocab_size=24,
-        d_model=768,
+        d_model=2,
         batch_size=32,
-        n_seq=int(1e4),
-        simple_data=False,
+        n_seq=int(1e5),
+        simple_data=True,
         # debug=True
         debug=False
     ):
+    base_seq = base_seq[:75]
+    # Check for adequate randomization - val_loader vs iterating through the dataset is currently the same
+
     if debug:
         simple_data = True
         n_seq = int(1e2)
@@ -103,20 +117,21 @@ def hotspot_experiment(
     # Cuda seed?
 
     # Load data into dataloaders
-    train_loader, val_loader, test_loader = get_sequence_loaders(dataset_class=MutationActivityDataset, dataset_dir=dataset_dir, batch_size=batch_size, simple_data=simple_data, no_verification=no_verification, vocab_size=vocab_size, n_seq=n_seq, base_seq=base_seq, amino_acids=amino_acids)
+    train_loader, val_loader, test_loader = get_sequence_loaders(dataset_class=MutationActivityDataset, dataset_dir=dataset_dir, batch_size=batch_size, simple_data=simple_data, no_verification=no_verification, vocab_size=vocab_size, n_mutations=n_mutations, n_seq=n_seq, base_seq=base_seq, amino_acids=amino_acids)
     # device = torch.device('cpu') 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Setting objective")
     objective = MSELoss()
     print("Building model")
     # Load network
-    model = FullyConnectedActivityPredictor(vocab_size=vocab_size, d_model=d_model, seq_length=len(base_seq) + 2)
+    model = NoTrainingActivityPredictor(vocab_size=vocab_size, d_model=d_model, seq_length=len(base_seq) + 2, amino_acids=amino_acids, base_seq=base_seq, dataset_dir=dataset_dir)
+    # model = FullyConnectedActivityPredictor(vocab_size=vocab_size, d_model=d_model, seq_length=len(base_seq) + 2)
     # model = TransformerActivityPredictor(vocab_size=vocab_size, d_model=d_model)
-    print("Building trainer")
-    trainer = Trainer(model=model, train_loader=train_loader, val_loader=val_loader, objective=objective, batch_size=batch_size, log_dir=log_dir, 
-        base_savepath=base_savepath, model_name=model_name, device=device, batch_eval_freq=batch_eval_freq, epoch_eval_freq=epoch_eval_freq)
-    print("Training model")
-    trainer.train(n_epochs=n_epochs)
+    # print("Building trainer")
+    # trainer = Trainer(model=model, train_loader=train_loader, val_loader=val_loader, objective=objective, batch_size=batch_size, log_dir=log_dir, 
+    #     base_savepath=base_savepath, model_name=model_name, device=device, batch_eval_freq=batch_eval_freq, epoch_eval_freq=epoch_eval_freq)
+    # print("Training model")
+    # trainer.train(n_epochs=n_epochs)
     print("Training complete") 
     get_summary_plots(model=model, base_seq=base_seq, amino_acids=amino_acids, device=device, log_dir=log_dir, dataset_dir=dataset_dir)
     # Results

@@ -17,6 +17,7 @@ class MutationDatasetGenerator(SeqDatasetGenerator):
             label_prefix='label', 
             base_seq=np.array(list('MNFPRASRLMQAAVLGGLMAVSAAATAQTNPYARGPNPTAASLEASAGPFTVRSFTVSRPSGYGAGTVYYPTNAGGTVGAIAIVPGYTARQSSIKWWGPRLASHGFVVITIDTNSTLDQPSSRSSQQMAALRQVASLNGTSSSPIYGKVDTARMGVMGWSMGGGGSLISAANNPSLKAAAPQAPWDSSTNFSSVTVPTLI')), 
             amino_acids=np.array(list('ACDEFGHIKLMNPQRSTVWY')),
+            n_mutations=10,
             **kwargs
         ):
 
@@ -26,6 +27,7 @@ class MutationDatasetGenerator(SeqDatasetGenerator):
         self.n_seq = n_seq
         self.base_seq = base_seq
         self.amino_acids = amino_acids
+        self.n_mutations = n_mutations
 
 
     def prepare_dataset(self):
@@ -70,8 +72,8 @@ class MutationDatasetGenerator(SeqDatasetGenerator):
         # For O(1) lookup
         beneficial_indices, detrimental_indices, flexible_indices = set(beneficial_indices), set(detrimental_indices), set(flexible_indices)
         # At flexible sites, polar hydrophilic are beneficial, hydrophobic are detrimental
-        hydrophobics = 'AILMFCV'
-        hydrophilics = 'RNDQEHK'
+        hydrophobics = self.amino_acids[:11]
+        hydrophilics = self.amino_acids[11:]
 
         # Start with a baseline positive activity
         activity = 1.
@@ -128,10 +130,7 @@ class MutationDatasetGenerator(SeqDatasetGenerator):
 
         return activity
 
-    def gen_activity_data(
-        self, 
-        n_mutations=10,
-    ):
+    def gen_activity_data(self):
         beneficial_indices, detrimental_indices, flexible_indices = self.define_hotspots()
         # Log metadata for train/val/test split
         self.log_sequence_data(np.ones(self.n_seq)*len(self.base_seq))
@@ -147,11 +146,11 @@ class MutationDatasetGenerator(SeqDatasetGenerator):
 
                     # create a mutation:
                     mut_sequence = copy.deepcopy(self.base_seq)
-                    mut_sites  = np.random.randint(0, len(self.base_seq), n_mutations)
+                    mut_sites = np.random.choice(len(self.base_seq), size=self.n_mutations, replace=False)
                     current_amino_acids = self.base_seq[mut_sites]
 
                     # Choose mutant values from amino acids not equal to the current amino acid
-                    mut_values = np.empty(n_mutations, dtype=str)
+                    mut_values = np.empty(self.n_mutations, dtype=str)
                     for i, current_amino_acid in enumerate(current_amino_acids):
                         current_amino_acid_idx = amino_acid_indices[current_amino_acid]
                         eligible_mutations = np.empty( len(self.amino_acids) - 1, dtype=str)
