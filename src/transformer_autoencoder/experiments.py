@@ -391,22 +391,22 @@ def get_summary_plots(model, base_seq, amino_acids, device, log_dir, dataset_dir
     scores = get_marginal_scores(model=model, device=device, dataset_dir=dataset_dir, base_seq=base_seq, amino_acids=amino_acids)
     colors = get_colors(base_seq=base_seq, dataset_dir=dataset_dir)
 
-    # Plot 0: average attention weights
+    # Plot 1: average attention weights
     average_attention = get_average_attention(model=model, device=device, dataset_dir=dataset_dir, base_seq=base_seq)
     plot_average_attention(attention=average_attention, colors=colors, log_dir=log_dir)
 
-    # Plot 0.5: attention weights for a couple of individual sequences
+    # Plot 2: attention weights for a couple of individual sequences
     sequences, mut_indices_list, attention_samples = get_attention_samples(model=model, device=device, dataset_dir=dataset_dir, base_seq=base_seq)
     plot_attention_samples(sequences=sequences, mut_indices_list=mut_indices_list, attention_samples=attention_samples, colors=colors, log_dir=log_dir)
 
-    # Plot 1: means and variances
+    # Plot 3: means and variances
     means, variances = get_mean_var_for_mutations(scores=scores, base_seq=base_seq, amino_acids=amino_acids)
     plot_mean_var(scores=scores, means=means, variances=variances, colors=colors, log_dir=log_dir)
 
-    # Plot 2: Predicted beneficial/detrimental/flexible indices vs. reality
+    # Plot 4: Predicted beneficial/detrimental/flexible indices vs. reality
     pred_good, pred_bad, pred_flexible = predict_activity(scores=scores, means=means, variances=variances)
     plot_hotspots(base_seq=base_seq, pred_good=pred_good, pred_bad=pred_bad, pred_flexible=pred_flexible, dataset_dir=dataset_dir, log_dir=log_dir)
 
-    # Plot 3: Distances between embeddings
+    # Plot 5: Distances between embeddings
     distance_matrix = get_distance_matrix(model, amino_acids, dataset_dir)
     plot_distance_matrix(distance_matrix, amino_acids, log_dir)

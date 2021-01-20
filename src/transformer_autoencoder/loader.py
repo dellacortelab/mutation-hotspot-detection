@@ -5,8 +5,7 @@
 import numpy as np
 from torch.utils.data import DataLoader
 
-from .dataset.uniparc_dataset import ProtSeqDataset
-from .dataset.seq_dataset import ShuffleDataset, padding_collate_fn
+from .dataset.seq_dataset import ShuffleDataset 
 
 # To calculate a good buffer size for protein sequences:
 # 1. For A-Z letters, it is 1 byte/letter
@@ -15,7 +14,7 @@ from .dataset.seq_dataset import ShuffleDataset, padding_collate_fn
 # 4. For example, 60e9 * 1/4 = 500 * 1 * n_seq -> n_seq = 30000000 (30 million sequences)
 # 5. Let buffer_size=n_seq
 
-def get_sequence_loaders(dataset_class=ProtSeqDataset, batch_size=32, vocab_size=8000, n_mutations=10, n_seq=None, dataset_dir='/data/uniparc', buffer_size=int(3e7), distributed=True, simple_data=True, no_verification=False, base_seq=np.array(list('MNFPRASRLMQAAVLGGLMAVSAAATAQTNPYARGPNPTAASLEASAGPFTVRSFTVSRPSGYGAGTVYYPTNAGGTVGAIAIVPGYTARQSSIKWWGPRLASHGFVVITIDTNSTLDQPSSRSSQQMAALRQVASLNGTSSSPIYGKVDTARMGVMGWSMGGGGSLISAANNPSLKAAAPQAPWDSSTNFSSVTVPTLI')), amino_acids=np.array(list('ACDEFGHIKLMNPQRSTVWY'))):
+def get_sequence_loaders(dataset_class, batch_size=32, vocab_size=8000, n_mutations=10, n_seq=None, dataset_dir='/data/uniparc', buffer_size=int(3e7), distributed=True, simple_data=True, no_verification=False, base_seq=np.array(list('MNFPRASRLMQAAVLGGLMAVSAAATAQTNPYARGPNPTAASLEASAGPFTVRSFTVSRPSGYGAGTVYYPTNAGGTVGAIAIVPGYTARQSSIKWWGPRLASHGFVVITIDTNSTLDQPSSRSSQQMAALRQVASLNGTSSSPIYGKVDTARMGVMGWSMGGGGSLISAANNPSLKAAAPQAPWDSSTNFSSVTVPTLI')), amino_acids=np.array(list('ACDEFGHIKLMNPQRSTVWY'))):
     train_dataset = dataset_class(mode='train', vocab_size=vocab_size, base_seq=base_seq, amino_acids=amino_acids, n_mutations=n_mutations, simple_data=simple_data, no_verification=no_verification, dataset_dir=dataset_dir, n_seq=n_seq)
     val_dataset = dataset_class(mode='val', vocab_size=vocab_size, dataset_dir=dataset_dir)
     test_dataset = dataset_class(mode='test', vocab_size=vocab_size, dataset_dir=dataset_dir)
@@ -28,22 +27,18 @@ def get_sequence_loaders(dataset_class=ProtSeqDataset, batch_size=32, vocab_size
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
-        # WARNING: specifying num_workers breaks this and yields a bunch of batches with the same contents
-        # num_workers=16,
         pin_memory=True,
         collate_fn=padding_collate_fn
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,
-        # num_workers=16,
         pin_memory=True,
         collate_fn=padding_collate_fn
     )
     test_loader = DataLoader(
         test_dataset,
         batch_size=batch_size,
-        # num_workers=16,
         pin_memory=True,
         collate_fn=padding_collate_fn
     )
