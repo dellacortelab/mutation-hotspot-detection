@@ -54,7 +54,10 @@ class Trainer():
             self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     
     def train(self, n_epochs=20):
-        """Trains the model for the set number of epochs"""
+        """Trains the model for the set number of epochs
+        Args:
+            n_epochs (int): the number of epochs to train for.
+        """
         # Put model on GPU
         self.model.to(self.device)
         # Put model in training mode (include e.g. Dropout layers)

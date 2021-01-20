@@ -1,3 +1,7 @@
+##########################################################################
+# Evaluator class for getting loss and accuracy on the validation dataset
+##########################################################################
+
 import torch
 
 class Evaluator():

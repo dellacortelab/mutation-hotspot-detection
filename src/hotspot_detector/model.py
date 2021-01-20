@@ -1,5 +1,5 @@
 #######################################################################################################
-# Neural network model classes for the Transformer AutoEncoder
+# Neural network model classes for the ActivityPredictor
 #######################################################################################################
 
 import os
@@ -12,9 +12,22 @@ from transformers import BertModel, BertConfig
 from .dataset.mutation_activity_dataset import MutationActivityDataset
 
 class FullyConnectedActivityPredictor(nn.Module):
-    """An architecture more suited to finding patterns based on positions in a fixed-length vector
+    """An architecture suited to finding patterns based on positions in a fixed-length vector
     """
-    def __init__(self, d_model=768, vocab_size=8000, seq_length=200, from_pretrained=False, base_savepath='/models/hydrolase_design/nt_activity_predictor', dataset_dir=None, amino_acids=np.array(list('AILMFWYVCGPRNDQEHKST')), base_seq=np.array(list('MNFPRASRLMQAAVLGGLMAVSAAATAQTNPYARGPNPTAASLEASAGPFTVRSFTVSRPSGYGAGTVYYPTNAGGTVGAIAIVPGYTARQSSIKWWGPRLASHGFVVITIDTNSTLDQPSSRSSQQMAALRQVASLNGTSSSPIYGKVDTARMGVMGWSMGGGGSLISAANNPSLKAAAPQAPWDSSTNFSSVTVPTLI'))):
+    def __init__(self, d_model=768, vocab_size=8000, seq_length=200, set_deterministic_weights=False, from_pretrained=False, model_name='fc_activity_predictor', base_savepath='/models/mutation_activity/activity_predictor', dataset_dir=None, amino_acids=np.array(list('AILMFWYVCGPRNDQEHKST')), base_seq=np.array(list('MNFPRASRLMQAAVLGGLMAVSAAATAQTNPYARGPNPTAASLEASAGPFTVRSFTVSRPSGYGAGTVYYPTNAGGTVGAIAIVPGYTARQSSIKWWGPRLASHGFVVITIDTNSTLDQPSSRSSQQMAALRQVASLNGTSSSPIYGKVDTARMGVMGWSMGGGGSLISAANNPSLKAAAPQAPWDSSTNFSSVTVPTLI'))):
+    """Generate a hotspot detection dataset, train a network to identify hotspots, and create plots summarizing the result.
+    Args:
+        d_model (int): the dimension of hidden layers
+        vocab_size (int): the vocabulary size (including <start>, <end>, <unk>, and <pad> tokens)
+        seq_length (int): the length of the sequence to predict hotspots onnt_activity_predictor
+        set_deterministic_weights (bool): whether or not to set optimal weights that we found analytically
+        from_pretrained (bool): whether to use weights from pretrained model
+        model_name (str): the model name for logged data
+        base_savepath (str): the path to the folder for saved models
+        dataset_dir (str): the path to the folder for the generated dataset
+        amino_acids (np.array of type str): the vocabulary of amino acids
+        base_seq (np.array of type str): the base sequence to mutate
+    """
         super().__init__()
 
         self.embedding = nn.Embedding(num_embeddings=vocab_size, embedding_dim=d_model)
@@ -39,30 +52,32 @@ class FullyConnectedActivityPredictor(nn.Module):
             self.embedding.weight[hydrophilic_tokenized_indices] = -torch.ones(9, d_model)
             self.embedding.weight[hydrophobic_tokenized_indices] = torch.ones(11, d_model)
 
-        self.lin_1.weight[:] = torch.ones(1, d_model)*6
-        
-        true_indices = np.load(os.path.join(dataset_dir, 'good_bad_flex_indices.npz'))
-        true_ids = np.zeros(seq_length)
-        # +1 because there is a start token
-        true_ids = np.zeros(seq_length)
-        true_ids[true_indices['flexible'] + 1] = 1
-        true_ids[true_indices['beneficial'] + 1] = 2
-        true_ids[true_indices['detrimental'] + 1] = 3
-        true_ids = torch.tensor(true_ids)
-        with torch.no_grad():
-            # Set flexible indices to -1.2, beneficial and detrimental indices to 0.
-            self.weight_layer.data[true_ids == 0] = 0.
-            self.weight_layer.data[true_ids == 1] = -1.2
-            self.weight_layer.data[true_ids == 2] = 0.
-            self.weight_layer.data[true_ids == 3] = 0.
-            # Set flexible and beneficial indices to .6, detrimental indices to -.6
-            self.bias_layer.data[true_ids == 0] = 0.
-            self.bias_layer.data[true_ids == 1] = 0.6
-            self.bias_layer.data[true_ids == 2] = 0.6
-            self.bias_layer.data[true_ids == 3] = -0.6
+        # An option for the perfect weights that we determined analytically to have zero loss
+        if set_deterministic_weights:
+            self.lin_1.weight[:] = torch.ones(1, d_model)*6
+            
+            true_indices = np.load(os.path.join(dataset_dir, 'good_bad_flex_indices.npz'))
+            true_ids = np.zeros(seq_length)
+            # +1 because there is a start token
+            true_ids = np.zeros(seq_length)
+            true_ids[true_indices['flexible'] + 1] = 1
+            true_ids[true_indices['beneficial'] + 1] = 2
+            true_ids[true_indices['detrimental'] + 1] = 3
+            true_ids = torch.tensor(true_ids)
+            with torch.no_grad():
+                # Set flexible indices to -1.2, beneficial and detrimental indices to 0.
+                self.weight_layer.data[true_ids == 0] = 0.
+                self.weight_layer.data[true_ids == 1] = -1.2
+                self.weight_layer.data[true_ids == 2] = 0.
+                self.weight_layer.data[true_ids == 3] = 0.
+                # Set flexible and beneficial indices to .6, detrimental indices to -.6
+                self.bias_layer.data[true_ids == 0] = 0.
+                self.bias_layer.data[true_ids == 1] = 0.6
+                self.bias_layer.data[true_ids == 2] = 0.6
+                self.bias_layer.data[true_ids == 3] = -0.6
 
         if from_pretrained:
-            activity_predictor_path = os.path.join(base_savepath, 'nt_activity_predictor.pt')
+            activity_predictor_path = os.path.join(base_savepath, model_name + '.pt')
             if os.path.exists(activity_predictor_path):
                 self.activity_predictor = torch.load(activity_predictor_path)
             else:

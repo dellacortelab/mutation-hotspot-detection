@@ -232,8 +232,8 @@ def padding_collate_fn(batch):
     return batch_in_seq, batch_out
 
 def shuffle_dataset_test():
-    from transformer_autoencoder.dataset.seq_dataset import ShuffleDataset
-    from transformer_autoencoder.dataset.mutation_activity_dataset import MutationActivityDataset
+    from hotspot_detector.dataset.seq_dataset import ShuffleDataset
+    from hotspot_detector.dataset.mutation_activity_dataset import MutationActivityDataset
     train_dataset = MutationActivityDataset(mode='train', vocab_size=200, no_verification=True, dataset_dir='/data/mutation_activity/dataset', n_seq=int(50))
     train_dataset = ShuffleDataset(train_dataset, buffer_size=5)
     while True:
