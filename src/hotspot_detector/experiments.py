@@ -7,7 +7,7 @@ import copy
 from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle as box
 import numpy as np
-from scipy.spatial import distance_matrix
+from scipy.spatial import distance_matrix as dist_matrix
 import os
 
 from .dataset.mutation_activity_dataset import MutationActivityDataset
@@ -356,7 +356,7 @@ def get_distance_matrix(model, amino_acids, dataset_dir):
     # Skip the start/end/unknown/padding tokens
     embeddings = model.embedding.weight.detach().cpu().numpy()
     embeddings = embeddings[tokenized_indices]
-    return distance_matrix(embeddings, embeddings)
+    return dist_matrix(embeddings, embeddings)
 
 def plot_distance_matrix(distance_matrix, amino_acids, log_dir):
     """Plot the distance matrix for the embeddings. We hope to see hydrophobics close to each other
